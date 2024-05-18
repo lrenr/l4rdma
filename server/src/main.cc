@@ -16,9 +16,11 @@ int main(int argc, char **argv) {
 
 	L4::Cap<L4vbus::Vbus> vbus = L4Re::Env::env()->get_cap<L4vbus::Vbus>("vbus_mlx");
 	if (!vbus.is_valid()) throw;
-    Device::pci_list_dev(vbus);
+	L4vbus::Pci_dev dev = Device::pci_get_dev(vbus);
+	l4_uint8_t *bar0 = Device::map_pci_bar(dev, 0);
+	printf("bar0:%p\n", bar0);
 
- 
+
 	main_srv.loop();
  
 	return 0;
