@@ -25,7 +25,7 @@ const unsigned int CQE_STATUS_OFFSET      = 1;
 const unsigned int CID_OPCODE_OFFSET      = 16;
 const unsigned int COD_STATUS_OFFSET      = 24;
 
-#pragma pack (4)
+#pragma pack(4)
 // Command Input Data
 struct CID {
     reg32 opcode = 0;
@@ -51,7 +51,7 @@ struct CQE {
     reg32 output_lenght = 0;
     reg32 ctrl = 0;
 };
-#pragma pack (0)
+#pragma pack()
 
 // Command Queue Ring Buffer
 struct CQ {
