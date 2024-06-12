@@ -1,6 +1,8 @@
 #pragma once
 
-namespace cmd {
+#include <l4/re/env>
+
+namespace hca {
 
 enum OPCODE {
     QUERY_HCA_CAP       = 0x100,
