@@ -17,7 +17,7 @@ void init_hca(l4_uint8_t* bar) {
 	cq.start = new cmd::CQE[cq.size];
 
 	// read Firmware Version
-    l4_uint32_t fw_rev = Device::get_reg32(bar, 0x00);
+	l4_uint32_t fw_rev = Device::get_reg32(bar, 0x00);
 	l4_uint16_t fw_rev_major = fw_rev;
 	l4_uint16_t fw_rev_minor = fw_rev >> 16;
 	printf("Firmware Version: %.4x:%.4x", fw_rev_major, fw_rev_minor);
@@ -26,7 +26,7 @@ void init_hca(l4_uint8_t* bar) {
 	l4_uint64_t addr = (l4_uint64_t)cq.start;
 	l4_uint32_t addr_lsb = addr & (~0x3ff);
 	l4_uint32_t addr_msb = addr >> 32;
-    Device::set_reg32(bar, 0x10, addr_msb);
+	Device::set_reg32(bar, 0x10, addr_msb);
 	Device::set_reg32(bar, 0x14, addr_lsb);
 
 	// wait for initialization
