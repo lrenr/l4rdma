@@ -10,7 +10,7 @@ Io.add_vbusses
         Property.num_msis = 10;
         PCI0 = Io.Vi.PCI_bus(function ()
             -- Testing with display devices
-            pci_hd = wrap(hw:match("PCI/CC_03"))
+            pci_hd = wrap(hw:match("PCI/CC_02"))
         end)
     end)
 }

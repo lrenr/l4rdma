@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
 	if (!main_srv.registry()->register_obj(&l4rdma_server, "l4rdma_server").is_valid()) {
 		printf("Could not register service\n");
 		return 1;
-    }
- 
+	}
+
 	printf("Welcome to the l4rdma server\n");
 
 	L4::Cap<L4vbus::Vbus> vbus = L4Re::Env::env()->get_cap<L4vbus::Vbus>("vbus_mlx");
@@ -22,6 +22,6 @@ int main(int argc, char **argv) {
 
 
 	main_srv.loop();
- 
+
 	return 0;
 }
