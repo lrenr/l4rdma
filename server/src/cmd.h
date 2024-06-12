@@ -2,22 +2,24 @@
 
 #include <l4/re/env>
 
-l4_uint64_t CQE_MAILBOX_MASK    = ~0x1ff;
-l4_uint32_t CQE_TYPE_MASK       = 0xff000000;
-l4_uint32_t CQE_TOKEN_MASK      = 0xff000000;
-l4_uint32_t CQE_SIGNATURE_MASK  = 0x00ff0000;
-l4_uint32_t CQE_STATUS_MASK     = 0x000000fe;
-l4_uint32_t CQE_OWNERSHIP_MASK  = 0x00000001;
-l4_uint32_t CID_OPCODE_MASK     = 0xffff0000;
-l4_uint32_t CID_OP_MOD_MASK     = 0x0000ffff;
-l4_uint32_t COD_STATUS_MASK     = 0xff000000;
+namespace cmd {
 
-unsigned int CQE_TYPE_OFFSET        = 24;
-unsigned int CQE_TOKEN_OFFSET       = 24;
-unsigned int CQE_SIGNATURE_OFFSET   = 16;
-unsigned int CQE_STATUS_OFFSET      = 1;
-unsigned int CID_OPCODE_OFFSET      = 16;
-unsigned int COD_STATUS_OFFSET      = 24;
+const l4_uint64_t CQE_MAILBOX_MASK    = ~0x1ff;
+const l4_uint32_t CQE_TYPE_MASK       = 0xff000000;
+const l4_uint32_t CQE_TOKEN_MASK      = 0xff000000;
+const l4_uint32_t CQE_SIGNATURE_MASK  = 0x00ff0000;
+const l4_uint32_t CQE_STATUS_MASK     = 0x000000fe;
+const l4_uint32_t CQE_OWNERSHIP_MASK  = 0x00000001;
+const l4_uint32_t CID_OPCODE_MASK     = 0xffff0000;
+const l4_uint32_t CID_OP_MOD_MASK     = 0x0000ffff;
+const l4_uint32_t COD_STATUS_MASK     = 0xff000000;
+
+const unsigned int CQE_TYPE_OFFSET        = 24;
+const unsigned int CQE_TOKEN_OFFSET       = 24;
+const unsigned int CQE_SIGNATURE_OFFSET   = 16;
+const unsigned int CQE_STATUS_OFFSET      = 1;
+const unsigned int CID_OPCODE_OFFSET      = 16;
+const unsigned int COD_STATUS_OFFSET      = 24;
 
 #pragma pack (4)
 struct CID {
@@ -44,18 +46,12 @@ struct CQE {
 };
 #pragma pack (0)
 
-CQE blank_cqe() {
-    CQE blank;
-    blank.type = CQE_TYPE_MASK & (0x7U << CQE_TYPE_OFFSET);
-    blank.input_lenght = 0;
-    blank.input_mailbox = 0;
-    blank.output_mailbox = 0;
-    blank.output_lenght = 0;
-    blank.ctrl = 0;
-    return blank;
-}
+CQE create_cqe_exmail(CID cid);
 
-bool poll_ownership(CQE &cqe) {
-    while (!(cqe.ctrl & CQE_OWNERSHIP_MASK));
-    return true;
+bool poll_ownership(CQE &cqe);
+
+void check_cqe_status(CQE &cqe);
+
+void check_cod_status(COD &cod);
+
 }
