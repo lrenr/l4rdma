@@ -23,26 +23,26 @@ const unsigned int COD_STATUS_OFFSET      = 24;
 
 #pragma pack (4)
 struct CID {
-    l4_uint32_t opcode;
-    l4_uint32_t op_mod;
-    l4_uint32_t cmd[2];
+    l4_uint32_t opcode = 0;
+    l4_uint32_t op_mod = 0;
+    l4_uint32_t cmd[2] = {0, 0};
 };
 
 struct COD {
-    l4_uint32_t status;
-    l4_uint32_t syndrome;
-    l4_uint32_t output[2];
+    l4_uint32_t status = 0;
+    l4_uint32_t syndrome = 0;
+    l4_uint32_t output[2] = {0, 0};
 };
 
 struct CQE {
-    l4_uint32_t type;
-    l4_uint32_t input_lenght;
-    l4_uint64_t input_mailbox;
+    l4_uint32_t type = 0;
+    l4_uint32_t input_lenght = 0;
+    l4_uint64_t input_mailbox = 0;
     CID input_inline;
     COD output_inline;
-    l4_uint64_t output_mailbox;
-    l4_uint32_t output_lenght;
-    l4_uint32_t ctrl;
+    l4_uint64_t output_mailbox = 0;
+    l4_uint32_t output_lenght = 0;
+    l4_uint32_t ctrl = 0;
 };
 #pragma pack (0)
 

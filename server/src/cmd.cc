@@ -6,19 +6,11 @@ using namespace cmd;
 
 CQE create_cqe_exmail(CID cid) {
     COD cod;
-    cod.status = 0;
-    cod.syndrome = 0;
-    cod.output = {0, 0};
-
     CQE cqe;
     cqe.type = CQE_TYPE_MASK & (0x7U << CQE_TYPE_OFFSET);
     cqe.input_lenght = 8;
-    cqe.input_mailbox = 0;
     cqe.input_inline = cid;
     cqe.output_inline = cod;
-    cqe.output_mailbox = 0;
-    cqe.output_lenght = 0;
-    cqe.ctrl = 0;
 
     return cqe;
 }
