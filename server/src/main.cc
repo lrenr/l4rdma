@@ -1,20 +1,26 @@
 #include <stdio.h>
+#include <sys/mman.h>
 #include "interface.h"
 #include "device.h"
 #include "hca.h"
 #include "cmd.h"
+#include "stdlib.h"
 
 cmd::CQ cq;
 
-void ring_doorbell(l4_uint8_t* bar, l4_uint32_t slot) {
-    l4_uint32_t dbr = (1 << slot);
-    Device::set_reg32(bar, 0x18, dbr);
+void ring_doorbell(l4_uint8_t* bar, l4_uint32_t* slots, int count) {
+	l4_uint32_t dbr = 0;
+	for (int i = 0; i < count; i++)
+		dbr += (1 << slots[i]);
+	Device::set_reg32(bar, 0x18, dbr);
 }
 
 void init_hca(l4_uint8_t* bar) {
 	// create default Command Queue
-	cq.size = 8;
-	cq.start = new cmd::CQE[cq.size];
+	cq.size = 4096 / sizeof(cmd::CQE);
+	//cq.start = new cmd::CQE[cq.size];
+	posix_memalign((void**) &(cq.start), 4096, 4096);
+	mlock(cq.start, 4096);
 
 	// read Firmware Version
 	l4_uint32_t fw_rev = Device::get_reg32(bar, 0x00);
@@ -43,7 +49,7 @@ void init_hca(l4_uint8_t* bar) {
 	// ENABLE_HCA
 	cqe = cmd::create_cqe(hca::ENABLE_HCA, 0x00);
 	slot = cmd::enqueue_cqe(cqe, cq);
-	ring_doorbell(bar, slot);
+	ring_doorbell(bar, &slot, 1);
 	cmd::validate_cqe(cqe);
 }
 
@@ -54,10 +60,12 @@ void teardown_hca(l4_uint8_t* bar) {
 	// TEARDOWN_HCA
 	cqe = cmd::create_cqe(hca::TEARDOWN_HCA, 0x00);
 	slot = cmd::enqueue_cqe(cqe, cq);
-	ring_doorbell(bar, slot);
+	ring_doorbell(bar, &slot, 1);
 	cmd::validate_cqe(cqe);
 
-	delete[] cq.start;
+	//delete[] cq.start;
+	munlock(cq.start, 4096);
+	free(cq.start);
 }
 
 Registry main_srv;
