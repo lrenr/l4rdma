@@ -1,71 +1,118 @@
 #include <stdio.h>
+#include <sys/ipc.h>
 #include <sys/mman.h>
 #include "interface.h"
 #include "device.h"
 #include "hca.h"
 #include "cmd.h"
-#include "stdlib.h"
+#include "mem.h"
 
-cmd::CQ cq;
+CMD::CQ cq;
 
-void ring_doorbell(l4_uint8_t* bar, l4_uint32_t* slots, int count) {
+void ring_doorbell(volatile reg32* dbv, l4_uint32_t* slots, int count) {
 	l4_uint32_t dbr = 0;
 	for (int i = 0; i < count; i++)
 		dbr += (1 << slots[i]);
-	Device::set_reg32(bar, 0x18, dbr);
+	printf("dbr: %.8x\n", dbr);
+	Device::iowrite32be(dbv, dbr);
 }
 
-void init_hca(l4_uint8_t* bar) {
-	// create default Command Queue
-	cq.size = 4096 / sizeof(cmd::CQE);
-	//cq.start = new cmd::CQE[cq.size];
-	posix_memalign((void**) &(cq.start), 4096, 4096);
-	mlock(cq.start, 4096);
-
-	// read Firmware Version
-	l4_uint32_t fw_rev = Device::get_reg32(bar, 0x00);
-	l4_uint16_t fw_rev_major = fw_rev;
-	l4_uint16_t fw_rev_minor = fw_rev >> 16;
-	printf("Firmware Version: %.4x:%.4x", fw_rev_major, fw_rev_minor);
-
-	// write Command Queue Address to Device
-	l4_uint64_t addr = (l4_uint64_t)cq.start;
-	l4_uint32_t addr_lsb = addr & (~0x3ff);
-	l4_uint32_t addr_msb = addr >> 32;
-	Device::set_reg32(bar, 0x10, addr_msb);
-	Device::set_reg32(bar, 0x14, addr_lsb);
-
-	// wait for initialization
+void init_wait(volatile reg32* initializing) {
 	l4_uint32_t init;
 	while (true) {
-		init = Device::get_reg32(bar, 0x1fc);
-		if (init & (1 << 31)) continue;
-		break;
+		printf(".");
+		init = Device::ioread32be(initializing);
+		if (!(init >> 31)) break;
 	}
-
-	cmd::CQE cqe;
-	l4_uint32_t slot;
-
-	// ENABLE_HCA
-	cqe = cmd::create_cqe(hca::ENABLE_HCA, 0x00);
-	slot = cmd::enqueue_cqe(cqe, cq);
-	ring_doorbell(bar, &slot, 1);
-	cmd::validate_cqe(cqe);
+	printf("\n");
 }
 
-void teardown_hca(l4_uint8_t* bar) {
-	cmd::CQE cqe;
-	l4_uint32_t slot;
+void init_hca(HCA::Init_Seg* init_seg, MEM::DMA_MEM cq_mem) {
+	using namespace Device;
+	// create default Command Queue
+	cq.size = 32;
+	cq.start = (CMD::CQE*) cq_mem.virt;
 
-	// TEARDOWN_HCA
-	cqe = cmd::create_cqe(hca::TEARDOWN_HCA, 0x00);
-	slot = cmd::enqueue_cqe(cqe, cq);
-	ring_doorbell(bar, &slot, 1);
-	cmd::validate_cqe(cqe);
+	// read Firmware Version
+	l4_uint32_t fw_rev = ioread32be(&init_seg->fw_rev);
+	l4_uint32_t cmd_rev = ioread32be(&init_seg->cmdif_rev_fw_sub);
+	l4_uint16_t fw_rev_major = fw_rev;
+	l4_uint16_t fw_rev_minor = fw_rev >> 16;
+	printf("Firmware Version: %.4x:%.4x %.4x:%.4x\n", fw_rev_major, fw_rev_minor,
+		(l4_uint16_t)cmd_rev, (l4_uint16_t)(cmd_rev >> 16));
+
+	init_wait(&init_seg->initializing);
+
+	printf("\nInit_Seg\n");
+	printf("%.8x\n", ioread32be(&init_seg->fw_rev));
+	printf("%.8x\n", ioread32be(&init_seg->cmdif_rev_fw_sub));
+	printf("%.8x\n", ioread32be(&init_seg->padding0[0]));
+	printf("%.8x\n", ioread32be(&init_seg->padding0[1]));
+	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_msb));
+	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_lsb_info));
+	printf("\n");
+
+	l4_uint32_t info = ioread32be(&init_seg->cmdq_addr_lsb_info) & 0xff;
+	l4_uint8_t log_size = info >> 4 &0xf;
+	l4_uint8_t log_stride = info & 0xf;
+	if (1 << log_size > 32) {
+		printf("%d Commands in queue\n", 1 << log_size);
+		throw;
+	}
+	if (log_size + log_stride > 12) {
+		printf("cq size overflow\n");
+		throw;
+	}
+
+	// write Command Queue Address to Device
+	l4_uint64_t addr = cq_mem.phys;
+	l4_uint32_t addr_lsb = addr & (~0x3ff);
+	l4_uint32_t addr_msb = (l4_uint64_t)addr >> 32;
+	addr_lsb = addr;
+	addr_msb = (l4_uint64_t)addr >> 32;
+	iowrite32be(&init_seg->cmdq_addr_msb, addr_msb);
+	iowrite32be(&init_seg->cmdq_addr_lsb_info, addr_lsb);
+	l4_uint32_t test1 = ioread32be(&init_seg->cmdq_addr_msb);
+	l4_uint32_t test2 = ioread32be(&init_seg->cmdq_addr_lsb_info);
+	printf("og: %.16llx\n", addr);
+	printf("ref: %.8x:%.8x\n", addr_msb, addr_lsb);
+	printf("addr_msb:addr_lsb: %.8x:%.8x\n", test1, test2);
+
+	// wait for initialization
+	init_wait(&init_seg->initializing);
+
+	printf("\nInit_Seg\n");
+	printf("%.8x\n", ioread32be(&init_seg->fw_rev));
+	printf("%.8x\n", ioread32be(&init_seg->cmdif_rev_fw_sub));
+	printf("%.8x\n", ioread32be(&init_seg->padding0[0]));
+	printf("%.8x\n", ioread32be(&init_seg->padding0[1]));
+	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_msb));
+	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_lsb_info));
+	printf("...\n");
+	printf("%.8x\n", ioread32be(&init_seg->initializing));
+	printf("\n");
+
+	//l4_uint32_t health = Device::get_reg32(bar, 0x1010);
+	//printf("health: %.2x\n", (l4_uint8_t)(health >> 24));
+
+	// ENABLE_HCA
+	l4_uint32_t slot = CMD::create_and_enqueue_cqe(cq, HCA::ENABLE_HCA, 0x00);
+	printf("slot: %d\n", slot);
+	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&((l4_uint32_t*)cq.start)[i]));
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	CMD::validate_cqe(cq, slot);
+	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&((l4_uint32_t*)cq.start)[i]));
+}
+
+void teardown_hca(HCA::Init_Seg* init_seg) {
+	// TEARDOWN_HC
+	l4_uint32_t slot = CMD::create_and_enqueue_cqe(cq, HCA::TEARDOWN_HCA, 0x00);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	CMD::validate_cqe(cq, slot);
 
 	//delete[] cq.start;
-	munlock(cq.start, 4096);
-	free(cq.start);
+	//munlock(cq.start, 4096);
+	//free(cq.start);
 }
 
 Registry main_srv;
@@ -86,8 +133,13 @@ int main(int argc, char **argv) {
 	l4_uint8_t *bar0 = Device::map_pci_bar(dev, 0);
 	printf("bar0:%p\n", bar0);
 
-	init_hca(bar0);
-	teardown_hca(bar0);
+	L4Re::Util::Shared_cap<L4Re::Dma_space> dma_cap = Device::bind_dma_space_to_device(dev);
+	MEM::DMA_MEM cq_mem = MEM::alloc_dma_mem(dma_cap, 4096);
+
+	HCA::Init_Seg* init_seg = (HCA::Init_Seg*)bar0;
+
+	init_hca(init_seg, cq_mem);
+	//teardown_hca(init_seg);
 
 
 	main_srv.loop();

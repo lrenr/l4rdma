@@ -1,8 +1,9 @@
 #pragma once
 
 #include <l4/re/env>
+#include "mem.h"
 
-namespace hca {
+namespace HCA {
 
 enum OPCODE {
     QUERY_HCA_CAP       = 0x100,
@@ -18,5 +19,18 @@ enum OPCODE {
     SET_ISSI            = 0x10b,
     SET_DRIVER_VERSION  = 0x10d,
 };
+
+#pragma pack(4)
+struct Init_Seg {
+    volatile reg32 fw_rev;
+    volatile reg32 cmdif_rev_fw_sub;
+    volatile reg32 padding0[2];
+    volatile reg32 cmdq_addr_msb;
+    volatile reg32 cmdq_addr_lsb_info;
+    volatile reg32 dbv;
+    volatile reg32 padding1[120];
+    volatile reg32 initializing;
+};
+#pragma pack()
 
 }

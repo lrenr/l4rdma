@@ -2,11 +2,9 @@
 
 #include <l4/re/env>
 #include "hca.h"
+#include "mem.h"
 
-namespace cmd {
-
-typedef l4_uint32_t reg32;
-typedef l4_uint64_t reg64;
+namespace CMD {
 
 const reg64 CQE_MAILBOX_MASK    = ~0x1ff;
 const reg32 CQE_TYPE_MASK       = 0xff000000;
@@ -28,28 +26,28 @@ const unsigned int COD_STATUS_OFFSET      = 24;
 #pragma pack(4)
 // Command Input Data
 struct CID {
-    reg32 opcode = 0;
-    reg32 op_mod = 0;
-    reg32 opt[2] = {0, 0};
+    volatile reg32 opcode = 0;
+    volatile reg32 op_mod = 0;
+    volatile reg32 opt[2] = {0, 0};
 };
 
 // Command Output Data
 struct COD {
-    reg32 status = 0;
-    reg32 syndrome = 0;
-    reg32 output[2] = {0, 0};
+    volatile reg32 status = 0;
+    volatile reg32 syndrome = 0;
+    volatile reg32 output[2] = {0, 0};
 };
 
 // Command Queue Entry
 struct CQE {
-    reg32 type = 0;
-    reg32 input_lenght = 0;
-    reg64 input_mailbox = 0;
+    volatile reg32 type = 0;
+    volatile reg32 input_lenght = 0;
+    volatile reg64 input_mailbox = 0;
     CID cid;
     COD cod;
-    reg64 output_mailbox = 0;
-    reg32 output_lenght = 0;
-    reg32 ctrl = 0;
+    volatile reg64 output_mailbox = 0;
+    volatile reg32 output_lenght = 0;
+    volatile reg32 ctrl = 0;
 };
 #pragma pack()
 
@@ -60,16 +58,14 @@ struct CQ {
     l4_uint32_t head;
 };
 
-void poll_ownership(CQE &cqe);
+void poll_ownership(volatile CQE* cqe);
 
-void check_cqe_status(CQE &cqe);
+void check_cqe_status(volatile CQE* cqe);
 
-void check_cod_status(COD &cod);
+void check_cod_status(volatile COD* cod);
 
-CQE create_cqe(hca::OPCODE opcode, reg32 op_mod);
+l4_uint32_t create_and_enqueue_cqe(volatile CQ &cq, HCA::OPCODE opcode, reg32 op_mod);
 
-l4_uint32_t enqueue_cqe(CQE &cqe, CQ &cq);
-
-void validate_cqe(CQE &cqe);
+void validate_cqe(volatile CQ &cq, l4_uint32_t slot);
 
 }
