@@ -5,8 +5,7 @@
 #include <l4/re/dataspace>
 #include <l4/re/util/shared_cap>
 
-typedef l4_uint32_t reg32;
-typedef l4_uint64_t reg64;
+typedef volatile l4_uint32_t reg32;
 
 namespace MEM {
 
@@ -16,6 +15,6 @@ struct DMA_MEM {
     L4Re::Dma_space::Dma_addr phys;
 };
 
-DMA_MEM alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size);
+DMA_MEM alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space> &dma_cap, l4_size_t size);
 
 }

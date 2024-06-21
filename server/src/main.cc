@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdexcept>
 #include <sys/ipc.h>
 #include <sys/mman.h>
 #include "interface.h"
@@ -8,8 +9,14 @@
 #include "mem.h"
 
 CMD::CQ cq;
+L4Re::Util::Shared_cap<L4Re::Dma_space> dma_cap;
 
-void ring_doorbell(volatile reg32* dbv, l4_uint32_t* slots, int count) {
+void debug_cmd(volatile CMD::CQ &cq, l4_uint32_t slot) {
+	reg32* entry = (reg32*)&cq.start[slot];
+	for (int i = 0; i < 16; i++) printf("%.8x\n", Device::ioread32be(&entry[i]));
+}
+
+void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
 	l4_uint32_t dbr = 0;
 	for (int i = 0; i < count; i++)
 		dbr += (1 << slots[i]);
@@ -17,7 +24,7 @@ void ring_doorbell(volatile reg32* dbv, l4_uint32_t* slots, int count) {
 	Device::iowrite32be(dbv, dbr);
 }
 
-void init_wait(volatile reg32* initializing) {
+void init_wait(reg32* initializing) {
 	l4_uint32_t init;
 	while (true) {
 		printf(".");
@@ -29,9 +36,10 @@ void init_wait(volatile reg32* initializing) {
 
 void init_hca(HCA::Init_Seg* init_seg, MEM::DMA_MEM cq_mem) {
 	using namespace Device;
+	using namespace CMD;
 	// create default Command Queue
 	cq.size = 32;
-	cq.start = (CMD::CQE*) cq_mem.virt;
+	cq.start = (CQE*) cq_mem.virt;
 
 	// read Firmware Version
 	l4_uint32_t fw_rev = ioread32be(&init_seg->fw_rev);
@@ -92,27 +100,59 @@ void init_hca(HCA::Init_Seg* init_seg, MEM::DMA_MEM cq_mem) {
 	printf("%.8x\n", ioread32be(&init_seg->initializing));
 	printf("\n");
 
-	//l4_uint32_t health = Device::get_reg32(bar, 0x1010);
-	//printf("health: %.2x\n", (l4_uint8_t)(health >> 24));
+	//TODO hardware health check
+
+	// INIT SEQUENCE
+	l4_uint32_t slot;
+	//MEM::DMA_MEM imb_mem = MEM::alloc_dma_mem(dma_cap, 4096);
+	MEM::DMA_MEM omb_mem = MEM::alloc_dma_mem(dma_cap, 4096);
 
 	// ENABLE_HCA
-	l4_uint32_t slot = CMD::create_and_enqueue_cqe(cq, HCA::ENABLE_HCA, 0x00);
+	slot = create_cqe(cq, ENABLE_HCA, 0x00, nullptr, 0, nullptr, ENABLE_HCA_OUTPUT_LENGTH, nullptr);
 	printf("slot: %d\n", slot);
-	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&((l4_uint32_t*)cq.start)[i]));
 	ring_doorbell(&init_seg->dbv, &slot, 1);
-	CMD::validate_cqe(cq, slot);
-	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&((l4_uint32_t*)cq.start)[i]));
+	validate_cqe(cq, slot);
+
+	// QUERY_ISSI
+	slot = create_cqe(cq, QUERY_ISSI, 0x00, nullptr, 0, nullptr, QUERY_ISSI_OUTPUT_LENGTH, &omb_mem);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	validate_cqe(cq, slot);
+
+	// Setting ISSI to Version 1 if supported or else 0
+	l4_uint32_t issi = get_issi_support(omb_mem);
+	if (issi) issi = 1;
+	else throw std::runtime_error("ISSI version 1 not supported by Hardware");
+
+	// SET_ISSI
+	slot = create_cqe(cq, SET_ISSI, 0x00, &issi, 4, nullptr, SET_ISSI_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	validate_cqe(cq, slot);
+	debug_cmd(cq, slot);
+
+	printf("\nISSI version: %d\n", issi);
+
+	// QUERY_PAGES boot
+	slot = create_cqe(cq, QUERY_PAGES, 0x1, nullptr, 0, nullptr, 16, nullptr);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	validate_cqe(cq, slot);
+	debug_cmd(cq, slot);
 }
 
 void teardown_hca(HCA::Init_Seg* init_seg) {
-	// TEARDOWN_HC
-	l4_uint32_t slot = CMD::create_and_enqueue_cqe(cq, HCA::TEARDOWN_HCA, 0x00);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	CMD::validate_cqe(cq, slot);
+	using namespace CMD;
 
-	//delete[] cq.start;
-	//munlock(cq.start, 4096);
-	//free(cq.start);
+	l4_uint32_t slot;
+
+	// TEARDOWN_HCA
+	/*slot = create_cqe(cq, TEARDOWN_HCA, 0x00, nullptr, 0, nullptr, TEARDOWN_HCA_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	validate_cqe(cq, slot);*/
+
+	// DISABLE_HCA
+	slot = create_cqe(cq, DISABLE_HCA, 0x00, nullptr, 0, nullptr, 8, nullptr);
+	ring_doorbell(&init_seg->dbv, &slot, 1);
+	validate_cqe(cq, slot);
+	debug_cmd(cq, slot);
 }
 
 Registry main_srv;
@@ -133,13 +173,13 @@ int main(int argc, char **argv) {
 	l4_uint8_t *bar0 = Device::map_pci_bar(dev, 0);
 	printf("bar0:%p\n", bar0);
 
-	L4Re::Util::Shared_cap<L4Re::Dma_space> dma_cap = Device::bind_dma_space_to_device(dev);
+	dma_cap = Device::bind_dma_space_to_device(dev);
 	MEM::DMA_MEM cq_mem = MEM::alloc_dma_mem(dma_cap, 4096);
 
 	HCA::Init_Seg* init_seg = (HCA::Init_Seg*)bar0;
 
 	init_hca(init_seg, cq_mem);
-	//teardown_hca(init_seg);
+	teardown_hca(init_seg);
 
 
 	main_srv.loop();
