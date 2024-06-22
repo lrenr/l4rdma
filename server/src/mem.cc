@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <l4/re/mem_alloc>
 #include <l4/re/util/cap_alloc>
 #include <l4/re/error_helper>
@@ -12,9 +13,9 @@ DMA_MEM MEM::alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_
     dma_mem.cap = L4Re::chkcap(L4Re::Util::make_shared_cap<L4Re::Dataspace>(),
         "Failed to allocate DMA Dataspace");
 
-    if (size % L4_SUPERPAGESIZE) {
+    /*if (size % L4_SUPERPAGESIZE) {
         size = ((size >> L4_SUPERPAGESHIFT) + 1) << L4_SUPERPAGESHIFT;
-    }
+    }*/
 
     L4Re::chksys(L4Re::Env::env()->mem_alloc()->alloc(size, dma_mem.cap.get(),
         L4Re::Mem_alloc::Continuous | L4Re::Mem_alloc::Pinned),
