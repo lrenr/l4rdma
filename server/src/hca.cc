@@ -49,10 +49,10 @@ void HCA::set_driver_version(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb
 
 	l4_uint32_t driver[18];
 	char version[24] = "l4re,mlx5,1.000.000000";
-	memcpy(&driver[2], version, 24);
+	memcpy(&driver[2], version, 23);
 	printf("Driver Version: ");
-	for (int i = 0; i < 23; i++) printf("%c", ((char*)&driver[2])[i]);
-	printf("\n\n");
+	for (int i = 0; i < 22; i++) printf("%c", ((char*)&driver[2])[i]);
+	printf("\n");
 
 	/* SET_DRIVER_VERSION */
 	slot = create_cqe(cq, SET_DRIVER_VERSION, 0x0, driver, 18, imb_mem, SET_DRIVER_VERSION_OUTPUT_LENGTH, nullptr);
