@@ -197,10 +197,10 @@ void CMD::get_cmd_output(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* mailbo
 }
 
 void CMD::ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
-	l4_uint32_t dbr = 0;
-	for (int i = 0; i < count; i++)
-		dbr += (1 << slots[i]);
-	iowrite32be(dbv, dbr);
+    l4_uint32_t dbr = 0;
+    for (int i = 0; i < count; i++)
+        dbr += (1 << slots[i]);
+    iowrite32be(dbv, dbr);
     /*int dbr_num = 0;
     while (dbr >>= 1) dbr_num++;
     printf("dbr: %.2d\n", dbr_num);*/

@@ -28,13 +28,13 @@ l4_uint32_t HCA::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_ME
 	get_cmd_output(cq, slot, omb_mem, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
 
 	int start = 6, end = 19, pos = 0, count = 0;
-    for (int i = end; i >= start; i--) {
+	for (int i = end; i >= start; i--) {
 		if ((pos = ffs(issi_out[i]))) break;
 		count++;
 	}
-    l4_uint32_t issi = (count * 32) + pos;
+	l4_uint32_t issi = (count * 32) + pos;
 
-    return issi;
+	return issi;
 }
 
 l4_int32_t HCA::get_number_of_pages(volatile CQ &cq, l4_uint32_t slot) {
