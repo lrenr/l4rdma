@@ -27,17 +27,20 @@ int main(int argc, char **argv) {
 
 	CMD::CQ cq;
 	dma dma_cap;
-	MEM::HCA_PAGE_MEM hca_page_mem;
+	MEM::HCA_DMA_MEM hca_dma_mem;
 
 	dma_cap = Device::bind_dma_space_to_device(dev);
-	MEM::DMA_MEM cq_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE);
-	MEM::DMA_MEM imb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT);
-	MEM::DMA_MEM omb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT);
+	MEM::DMA_MEM* cq_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE, &hca_dma_mem.dma_mem[0]);
+	MEM::DMA_MEM* imb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[1]);
+	MEM::DMA_MEM* omb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[2]);
+	hca_dma_mem.dma_mem_count += 3;
 
 	using namespace HCA;
 	Init_Seg* init_seg = (HCA::Init_Seg*)bar0;
-	init_hca(cq, dma_cap, hca_page_mem, init_seg, cq_mem, imb_mem, omb_mem);
-	//teardown_hca(init_seg);
+	cq.size = 32;
+	cq.start = (CMD::CQE*)cq_mem->virt;
+	init_hca(cq, dma_cap, init_seg, cq_mem, imb_mem, omb_mem, hca_dma_mem);
+	teardown_hca(cq, init_seg, omb_mem);
 
 	main_srv.loop();
 

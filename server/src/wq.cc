@@ -27,7 +27,7 @@ void WQ_impl::setup_and_start(unsigned long qsize, L4::Cap<L4::Thread> caller,
 
     printf("Setup complete\n");
 
-    // Notify server that this wp is ready to receive requests
+    /* Notify server that this wp is ready to receive requests */
     auto tag = l4_ipc_send(caller.cap(), l4_utcb(),
             l4_msgtag(0, 0, 0, 0), L4_IPC_NEVER);
     if (l4_msgtag_has_error(tag)) {
@@ -41,7 +41,7 @@ void WQ_impl::setup_and_start(unsigned long qsize, L4::Cap<L4::Thread> caller,
     catch (...) {
         printf("Shutting down work queue\n");
 
-        // Unregister server handler, clean up resources and then leave
+        /* Unregister server handler, clean up resources and then leave */
         work_queue.registry.registry()->unregister_obj(&work_queue);
         work_queue.cleanup();
     }
@@ -73,20 +73,20 @@ long WQ_impl::op_terminate(WQ_if::Rights) {
 }
 
 int WQ_impl::mem_alloc(unsigned long qsize) {
-    // Alloc capabilities for memory
+    /* Alloc capabilities for memory */
     rq = L4Re::Util::cap_alloc.alloc<L4Re::Dataspace>();
     if (! rq.is_valid()) {
         printf("Failed to allocate cap slot for receive queue\n");
         return 1;
     }
 
-    // Allocate dataspaces for memory
+    /* Allocate dataspaces for memory */
     if (L4Re::Env::env()->mem_alloc()->alloc(qsize, rq) < 0) {
         printf("Failed to allocate receive queue dataspace\n");
         return 1;
     }
 
-    // Map dataspaces into address space
+    /* Map dataspaces into address space */
     if (L4Re::Env::env()->rm()->attach(&rq_addr, qsize,
             L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
             L4::Ipc::make_cap_rw(rq)) < 0) {
@@ -101,10 +101,10 @@ int WQ_impl::mem_alloc(unsigned long qsize) {
 }
 
 void WQ_impl::cleanup() {
-    // Unmap dataspaces from address space
+    /* Unmap dataspaces from address space */
     if (L4Re::Env::env()->rm()->detach(rq_addr, NULL) < 0)
         printf("Failed to detach RQ dataspace!\n");
     
-    // Free dataspace capabilities
+    /* Free dataspace capabilities */
     L4Re::Util::cap_alloc.free(rq, L4Re::This_task, L4_FP_ALL_SPACES);
 }

@@ -1,5 +1,7 @@
 #include <stdexcept>
 #include <stdio.h>
+#include <chrono>
+#include <thread>
 #include "cmd.h"
 #include "device.h"
 
@@ -7,13 +9,16 @@ using namespace CMD;
 using namespace Device;
 
 void CMD::poll_ownership(volatile CQE* cqe) {
-    int count = 0;
+    using namespace std;
+    using namespace std::chrono;
+
+    auto start = high_resolution_clock::now();
     while (l4_uint8_t res = ioread32be(&cqe->ctrl) & CQE_OWNERSHIP_MASK) {
-        if (count == 50) break;
-        count++;
-        printf("%x", res);
+        auto now = high_resolution_clock::now();
+        if (duration_cast<milliseconds>(now - start).count() >= CMD_TIMEOUT_MS)
+            throw std::runtime_error("CMD Timeout");
+        this_thread::sleep_for(milliseconds(20));
     }
-    printf("\n");
 }
 
 void CMD::check_cqe_status(volatile CQE* cqe) {
@@ -57,51 +62,52 @@ void CMD::check_cod_status(volatile COD* cod) {
     case CMD_STATUS_BAD_PKT_ERR:
     case CMD_STATUS_BAD_SIZE_OUTS_CQES_ERR:
     default:
-        printf("COD Error Code: %x\n", status);
+        printf("COD Error Code: %x | opcode: 0x%x\n", status,
+            ioread32be((&cod->status) - 4) >> 16);
         fflush(stdout);
         throw std::runtime_error("COD Error");
     }
 }
 
 void CMD::tie_mail_together(MEM::DMA_MEM* mailbox, l4_uint32_t mailbox_counter) {
+    int offset_in_bytes;
+    MBB* new_mailbox;
+    l4_uint64_t phys;
     for (l4_uint32_t i = 0; i < mailbox_counter; i++) {
         /* make mailbox blocks into a list for the hw
-        *  by adding next_pointer and block_number to each
-        */
-        int offset_in_bytes = MAILBOX_ALIGN_SIZE * i;
-        MBB* new_mailbox = (MBB*)((char*)mailbox->virt + offset_in_bytes);
-        l4_uint64_t phys = mailbox->phys + offset_in_bytes + MAILBOX_ALIGN_SIZE;
+           by adding next_pointer and block_number to each */
+        offset_in_bytes = MAILBOX_ALIGN_SIZE * i;
+        new_mailbox = (MBB*)((char*)mailbox->virt + offset_in_bytes);
+        phys = mailbox->phys + offset_in_bytes + MAILBOX_ALIGN_SIZE;
         iowrite32be(&new_mailbox->next_pointer_msb, (l4_uint32_t)(phys >> 32));
         iowrite32be(&new_mailbox->next_pointer_lsb, (l4_uint32_t)phys);
         iowrite32be(&new_mailbox->block_number, i);
         iowrite32be(&new_mailbox->ctrl, 0);
-        printf("bn: %d | virt: %p | next: %llx\n", i, (void*)new_mailbox, phys);
+        //printf("bn: %d | virt: %p | next: %llx\n", i, (void*)new_mailbox, phys);
     }
     /* configure the last block in the MBB list
-    *  by setting next_pointer to 0 and block_number to mailbox_counter
-    */
-    int offset_in_bytes = MAILBOX_ALIGN_SIZE * mailbox_counter;
-    MBB* new_mailbox = (MBB*)((char*)mailbox->virt + offset_in_bytes);
+       by setting next_pointer to 0 and block_number to mailbox_counter */
+    offset_in_bytes = MAILBOX_ALIGN_SIZE * mailbox_counter;
+    new_mailbox = (MBB*)((char*)mailbox->virt + offset_in_bytes);
     iowrite32be(&new_mailbox->next_pointer_msb, 0);
     iowrite32be(&new_mailbox->next_pointer_lsb, 0);
     iowrite32be(&new_mailbox->block_number, mailbox_counter);
     iowrite32be(&new_mailbox->ctrl, 0);
-    printf("bn: %d | virt: %p | next: %d\n", mailbox_counter, (void*)new_mailbox, 0);
+    //printf("bn: %d | virt: %p | next: %d\n", mailbox_counter, (void*)new_mailbox, 0);
 }
 
 /* Puts command input data after the first 16 bytes into mailbox blocks (MBB).
-*  MBBs are auto added as needed (this assumes enough DMA memory is provided!) 
-*/
-void CMD::package_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length) {
+   MBBs are auto added as needed (this assumes enough DMA memory is provided!) */
+void CMD::pack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length) {
     MBB* package = (MBB*)mailbox->virt;
-    clear_mailbox(mailbox);
     l4_uint32_t data_counter = 0, mailbox_counter = 0;
+    int offset_in_bytes;
     for (l4_uint32_t i = 0; i < length; i++) {
         if (data_counter == 128) {
-            // start new mailbox block after mailbox_data field is full
+            /* start new mailbox block after mailbox_data field is full */
             data_counter = 0;
             mailbox_counter++;
-            int offset_in_bytes = MAILBOX_ALIGN_SIZE * mailbox_counter;
+            offset_in_bytes = MAILBOX_ALIGN_SIZE * mailbox_counter;
             package = (MBB*)((char*)mailbox->virt + offset_in_bytes);
         }
         //printf("pack stage: %.5d | data_counter: %.3d | mailbox_counter %.2d\n", i, data_counter, mailbox_counter);
@@ -115,20 +121,22 @@ void CMD::package_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t 
 l4_uint32_t CMD::create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
     l4_uint32_t* payload, l4_uint32_t payload_length, MEM::DMA_MEM* input_mailbox,
     l4_uint32_t output_length, MEM::DMA_MEM* output_mailbox) {
-
+    output_length = (output_length + 2) * 4;
     CQE* cqe = &cq.start[cq.head];
-    l4_uint32_t input_length = (payload_length * 4) + 8;
+    reg32* reg = (reg32*)cqe;
+    for (int i = 0; i < 16; i++) iowrite32be(&reg[i], 0);
+    l4_uint32_t input_length = (payload_length + 2) * 4;
     iowrite32be(&cqe->type, CQE_TYPE_MASK & (0x7U << CQE_TYPE_OFFSET));
     iowrite32be(&cqe->input_length, input_length);
     if (input_length > 8) {
-        // first 8 bytes of additional input data are being put into the CQE
+        /* first 8 bytes of additional input data are being put into the CQE */
         iowrite32be(&cqe->cid.data[0], payload[0]);
         if (input_length > 12) {
             iowrite32be(&cqe->cid.data[1], payload[1]);
             if (input_length > 16) {
-                // input length overflow into mailbox
-                // packaging payload (without first 8 bytes) into input mailbox
-                package_mail(input_mailbox, &payload[2], payload_length - 2);
+                /* input length overflow into mailbox
+                   packaging payload (without first 8 bytes) into input mailbox */
+                pack_mail(input_mailbox, &payload[2], payload_length - 2);
                 iowrite32be(&cqe->input_mailbox_msb, (l4_uint32_t)(input_mailbox->phys >> 32));
                 iowrite32be(&cqe->input_mailbox_lsb, (l4_uint32_t)input_mailbox->phys & CQE_MAILBOX_MASK);
             }
@@ -137,14 +145,14 @@ l4_uint32_t CMD::create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
     iowrite32be(&cqe->cid.opcode, CID_OPCODE_MASK & (opcode << CID_OPCODE_OFFSET));
     iowrite32be(&cqe->cid.op_mod, CID_OP_MOD_MASK & op_mod);
     if (output_length > 16) {
-        // setup MBB chain for the output mailbox
+        /* setup MBB chain for the output mailbox */
         l4_uint32_t mbb_bytes = 128 * 4;
         l4_uint32_t omb_length = output_length - 16;
         l4_uint32_t mailbox_counter = 0;
         if (omb_length > mbb_bytes) {
             mailbox_counter = omb_length / mbb_bytes;
             if (!(omb_length % mbb_bytes)) mailbox_counter--;
-            printf("mbc: %d\n", mailbox_counter);
+            //printf("mbc: %d\n", mailbox_counter);
         }
         tie_mail_together(output_mailbox, mailbox_counter);
         iowrite32be(&cqe->output_mailbox_msb, (l4_uint32_t)(output_mailbox->phys >> 32));
@@ -157,15 +165,45 @@ l4_uint32_t CMD::create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
     cq.head++;
     if (cq.head >= cq.size)
         cq.head = 0;
+    //printf("cq.head: %d | slot: %d\n", cq.head, slot);
     return slot;
+}
+
+void CMD::unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length) {
+    MBB* package = (MBB*)mailbox->virt;
+    l4_uint32_t data_counter = 0, mailbox_counter = 0;
+    int offset_in_bytes;
+    for (l4_uint32_t i = 0; i < length; i++) {
+        if (data_counter == 128) {
+            /* start new mailbox block */
+            data_counter = 0;
+            mailbox_counter++;
+            offset_in_bytes = MAILBOX_ALIGN_SIZE * mailbox_counter;
+            package = (MBB*)((char*)mailbox->virt + offset_in_bytes);
+        }
+        payload[i] = ioread32be(&package->mailbox_data[data_counter]);
+        data_counter++;
+    }
+}
+
+void CMD::get_cmd_output(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length) {
+    CQE* cqe = &cq.start[slot];
+    if (!output_length) return;
+    output[0] = ioread32be(&cqe->cod.output[0]);
+    if (output_length > 1) {
+        output[1] = ioread32be(&cqe->cod.output[1]);
+        if (output_length > 2) unpack_mail(mailbox, &output[2], output_length - 2);
+    }
 }
 
 void CMD::ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
 	l4_uint32_t dbr = 0;
 	for (int i = 0; i < count; i++)
 		dbr += (1 << slots[i]);
-	printf("dbr: %.8x\n", dbr);
 	iowrite32be(dbv, dbr);
+    /*int dbr_num = 0;
+    while (dbr >>= 1) dbr_num++;
+    printf("dbr: %.2d\n", dbr_num);*/
 }
 
 void CMD::validate_cqe(volatile CQ &cq, l4_uint32_t* slots, int count) {
@@ -174,19 +212,5 @@ void CMD::validate_cqe(volatile CQ &cq, l4_uint32_t* slots, int count) {
         poll_ownership(cqe);
         check_cqe_status(cqe);
         check_cod_status(&cqe->cod);
-    }
-}
-
-void CMD::clear_mailbox(MEM::DMA_MEM* mailbox) {
-    int offset_in_bytes;
-    MBB* mbb;
-    for (l4_uint32_t i = 0; i < MBB_MAX_COUNT; i++) {
-        offset_in_bytes = MAILBOX_ALIGN_SIZE * i;
-        mbb = (MBB*)((char*)mailbox->virt + offset_in_bytes);
-        for (int i = 0; i < 120; i++) iowrite32be(&mbb->mailbox_data[i], 0);
-        iowrite32be(&mbb->next_pointer_msb, 0);
-        iowrite32be(&mbb->next_pointer_lsb, 0);
-        iowrite32be(&mbb->block_number, 0);
-        iowrite32be(&mbb->ctrl, 0);
     }
 }

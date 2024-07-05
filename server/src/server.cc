@@ -7,11 +7,11 @@
 long L4RDMA_Server::op_create_wq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::Cap<WQ_if> &wq) {
     L4::Cap<WQ_if> wq_if;
 
-    // Get thread cap to ourself (the WQ will report ready state to us via
-    // this cap) and launch handler thread
+    /* Get thread cap to ourself (the WQ will report ready state to us via
+       this cap) and launch handler thread */
     L4::Cap<L4::Thread> self = Pthread::L4::cap(pthread_self());
     std::thread wq_thread(WQ_impl::setup_and_start, qsize, self, &wq_if);
-    // Wait for the WQ thread to signal readiness
+    /* Wait for the WQ thread to signal readiness */
     auto tag = l4_ipc_receive(pthread_l4_cap(wq_thread.native_handle()),
                             l4_utcb(), L4_IPC_NEVER);
     if (l4_msgtag_has_error(tag))
@@ -26,11 +26,11 @@ long L4RDMA_Server::op_create_wq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::C
 long L4RDMA_Server::op_create_cq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::Cap<CQ_if> &cq) {
     L4::Cap<CQ_if> cq_if;
 
-    // Get thread cap to ourself (the CQ will report ready state to us via
-    // this cap) and launch handler thread
+    /* Get thread cap to ourself (the CQ will report ready state to us via
+       this cap) and launch handler thread */
     L4::Cap<L4::Thread> self = Pthread::L4::cap(pthread_self());
     std::thread cq_thread(CQ_impl::setup_and_start, qsize, self, &cq_if);
-    // Wait for the CQ thread to signal readiness
+    /* Wait for the CQ thread to signal readiness */
     auto tag = l4_ipc_receive(pthread_l4_cap(cq_thread.native_handle()),
                             l4_utcb(), L4_IPC_NEVER);
     if (l4_msgtag_has_error(tag))

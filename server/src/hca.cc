@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <cstring>
 #include <stdexcept>
 #include "hca.h"
 #include "device.h"
+#include "mem.h"
 
 using namespace CMD;
 using namespace Device;
@@ -21,57 +23,209 @@ void HCA::init_wait(reg32* initializing) {
 	printf("\n");
 }
 
-l4_uint32_t HCA::get_issi_support(MEM::DMA_MEM& mailbox) {
-    reg32* data = (reg32*)mailbox.virt;
-    l4_uint32_t issi;
-    //TODO figure out max length
-    for (int i = 0; i < 28; i++)
-        if ((issi = ioread32be(&data[i]))) break;
-    //clear_mailbox(&mailbox);
+l4_uint32_t HCA::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem) {
+	l4_uint32_t issi_out[QUERY_ISSI_OUTPUT_LENGTH];
+	get_cmd_output(cq, slot, omb_mem, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
+
+	int start = 6, end = 19, pos = 0, count = 0;
+    for (int i = end; i >= start; i--) {
+		if ((pos = ffs(issi_out[i]))) break;
+		count++;
+	}
+    l4_uint32_t issi = (count * 32) + pos;
+
     return issi;
 }
 
-l4_uint32_t HCA::get_number_of_pages(volatile CQ &cq, l4_uint32_t slot) {
-    CQE* cqe = &cq.start[slot];
-    return ioread32be(&cqe->cod.output[1]);
+l4_int32_t HCA::get_number_of_pages(volatile CQ &cq, l4_uint32_t slot) {
+	l4_uint32_t pages_out[QUERY_ISSI_OUTPUT_LENGTH];
+	get_cmd_output(cq, slot, nullptr, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
+
+	return pages_out[1];
 }
 
-void HCA::provide_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM& imb_mem, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count) {
-    l4_uint32_t cmd_count = (init_page_count*2)/IMB_MAX_DATA;
+void HCA::set_driver_version(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem) {
+	l4_uint32_t slot;
+
+	l4_uint32_t driver[18];
+	char version[24] = "l4re,mlx5,1.000.000000";
+	memcpy(&driver[2], version, 24);
+	printf("Driver Version: ");
+	for (int i = 0; i < 23; i++) printf("%c", ((char*)&driver[2])[i]);
+	printf("\n\n");
+
+	/* SET_DRIVER_VERSION */
+	slot = create_cqe(cq, SET_DRIVER_VERSION, 0x0, driver, 18, imb_mem, SET_DRIVER_VERSION_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+}
+
+l4_uint32_t HCA::configure_issi(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+	l4_uint32_t slot;
+
+	/* QUERY_ISSI */
+	slot = create_cqe(cq, QUERY_ISSI, 0x0, nullptr, 0, nullptr, QUERY_ISSI_OUTPUT_LENGTH, omb_mem);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	/* Setting ISSI to Version 1 if supported or else 0 */
+	l4_uint32_t issi = get_issi_support(cq, slot, omb_mem);
+	printf("Supported ISSI version: %d\n", issi);
+	if (issi) issi = 1;
+	else throw std::runtime_error("ISSI version 1 not supported by Hardware");
+
+	/* SET_ISSI */
+	slot = create_cqe(cq, SET_ISSI, 0x0, &issi, 1, nullptr, SET_ISSI_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	return issi;
+}
+
+bool HCA::configure_hca_cap(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem) {
+	l4_uint32_t slot;
+
+	/* QUERY_HCA_CAP */
+	l4_uint32_t payload = 0;
+	slot = create_cqe(cq, QUERY_HCA_CAP, 0x0, &payload, 1, nullptr, QUERY_HCA_CAP_OUTPUT_LENGTH, omb_mem);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	l4_uint32_t hca_cap[QUERY_HCA_CAP_OUTPUT_LENGTH];
+	get_cmd_output(cq, slot, omb_mem, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH);
+
+	/* 0x1 = 128 byte Cache line size supported */
+	l4_uint32_t cache_line_128byte = (hca_cap[(0x2c / 4) + 2] >> 27) & 0x1;
+	if (cache_line_128byte) hca_cap[(0x2c / 4) + 2] = 1 << 27;
+	
+	/* 0x0 = disable cmd signatures for input and output
+	   0x1 = enable cmd signature generation by hw for output
+	   0x3 = enable cmd signature checks for input */
+	l4_uint32_t cmdif_checksum = (hca_cap[(0x40 / 4) + 2] >> 14) & 0x3;
+	if (cmdif_checksum >= 0x1) hca_cap[(0x40 / 4) + 2] = 1 << 14;
+
+	/* base log2 max number of sq (0 = setting not supported) */
+	l4_uint32_t log_max_sq = (hca_cap[(0x6c / 4) + 2] >> 16) & 0x1f;
+	if (log_max_sq) hca_cap[(0x6c / 4) + 2] = log_max_sq << 16;
+	l4_uint32_t max_sq = 1 << log_max_sq;
+
+	/* 0x1 = exec SET_DRIVER_VERSION command */
+	l4_uint32_t driver_version = (hca_cap[(0x4c / 4) + 2] >> 30) & 0x1;
+
+	printf("cache_line_128: %d | cmdif_support: %x | max_num_sq: %d | set_driver: %d\n", cache_line_128byte, cmdif_checksum, max_sq, driver_version);
+
+	/* SET_HCA_CAP */
+	slot = create_cqe(cq, SET_HCA_CAP, 0x0, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH, imb_mem, SET_HCA_CAP_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	return driver_version;
+}
+
+void HCA::provide_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
+	l4_uint32_t slot;
+
+    l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
 	l4_uint32_t remainder;
-	if ((remainder = (init_page_count*2)%IMB_MAX_DATA)) {
+	if ((remainder = (page_count*2)%IMB_MAX_DATA)) {
 		cmd_count++;
 	}
 
+	printf("page_count: %d | cmd_count: %d\n", page_count, cmd_count);
+
+	l4_uint32_t payload_page_count;
+	l4_uint64_t phys;
+
 	for (l4_uint32_t i = 0; i < cmd_count; i++) {
-		l4_uint32_t payload_page_count;
 		if (i == cmd_count - 1) payload_page_count = remainder ? remainder/2 : IMB_MAX_DATA/2;
 		else payload_page_count = IMB_MAX_DATA/2;
 		
-		l4_uint32_t init_page_payload[2 + (payload_page_count * 2)];
-		init_page_payload[0] = 0;
-		init_page_payload[1] = payload_page_count;
-		for (l4_uint32_t i = 0; i < payload_page_count; i++) {
-			l4_uint64_t phys = init_page_mem->phys + (i * HCA_PAGE_SIZE);
-			init_page_payload[2 + (i * 2)] = (l4_uint32_t)(phys >> 32);
-			init_page_payload[2 + (i * 2) + 1] = (l4_uint32_t)phys;
+		printf("payload_page_count: %d\n", payload_page_count);
+		l4_uint32_t page_payload[2 + (payload_page_count * 2)];
+		page_payload[0] = 0;
+		page_payload[1] = payload_page_count;
+		for (l4_uint32_t j = 0; j < payload_page_count; j++) {
+			phys = page_mem->phys + (j * HCA_PAGE_SIZE);
+			page_payload[2 + (j * 2)] = (l4_uint32_t)(phys >> 32);
+			page_payload[2 + (j * 2) + 1] = (l4_uint32_t)phys;
 		}
 
-		// MANAGE_PAGES init
-		l4_uint32_t slot = create_cqe(cq, MANAGE_PAGES, 0x1, init_page_payload, 2 + (payload_page_count * 2), &imb_mem, 16, nullptr);
+		/* MANAGE_PAGES */
+		slot = create_cqe(cq, MANAGE_PAGES, 0x1, page_payload, 2 + (payload_page_count * 2), imb_mem, 2, nullptr);
 		ring_doorbell(dbv, &slot, 1);
 		validate_cqe(cq, &slot, 1);
 	}
 }
 
-void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, MEM::HCA_PAGE_MEM& hca_page_mem, Init_Seg* init_seg, MEM::DMA_MEM& cq_mem, MEM::DMA_MEM& imb_mem, MEM::DMA_MEM& omb_mem) {
+l4_int32_t HCA::provide_boot_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+	l4_uint32_t slot;
+
+	/* QUERY_PAGES Boot */
+	slot = create_cqe(cq, QUERY_PAGES, 0x1, nullptr, 0, nullptr, QUERY_PAGES_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	/* Provide Boot Pages */
+	l4_int32_t boot_page_count = get_number_of_pages(cq, slot);
+	if (boot_page_count < 0) throw;
+
+	MEM::DMA_MEM* boot_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * boot_page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
+	hca_dma_mem.dma_mem_count++;
+	provide_pages(cq, dbv, imb_mem, boot_page_mem, boot_page_count);
+
+	return boot_page_count;
+}
+
+l4_int32_t HCA::provide_init_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+	l4_uint32_t slot;
+
+	/* QUERY_PAGES Init */
+	slot = create_cqe(cq, QUERY_PAGES, 0x2, nullptr, 0, nullptr, QUERY_PAGES_OUTPUT_LENGTH, nullptr);
+	ring_doorbell(dbv, &slot, 1);
+	validate_cqe(cq, &slot, 1);
+
+	/* Provide Init Pages */
+	l4_int32_t init_page_count = get_number_of_pages(cq, slot);
+	if (init_page_count < 0) throw;
+
+	MEM::DMA_MEM* init_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * init_page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
+	hca_dma_mem.dma_mem_count++;
+	provide_pages(cq, dbv, imb_mem, init_page_mem, init_page_count);
+
+	return init_page_count;
+}
+
+l4_uint32_t HCA::reclaim_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+	l4_uint32_t slot;
+	l4_int32_t result = 0;
+
+	l4_int32_t reclaim_page_count;
+	l4_int32_t page_count = 64 * MBB_MAX_COUNT;
+	l4_uint32_t payload[2];
+	payload[0] = 0;
+	payload[1] = page_count;
+	l4_uint32_t output_length = 2 + (page_count * 2);
+	CQE* cqe;
+	do {
+		/* MANAGE_PAGES Reclaim */
+		slot = create_cqe(cq, MANAGE_PAGES, 0x2, payload, 2, nullptr, output_length, omb_mem);
+		ring_doorbell(dbv, &slot, 1);
+		validate_cqe(cq, &slot, 1);
+
+		cqe = &cq.start[slot];
+		reclaim_page_count = (l4_int32_t)ioread32be(&cqe->cod.output[0]);
+		printf("reclaiming: %d\n", reclaim_page_count);
+		result += reclaim_page_count;
+	} while (reclaim_page_count);
+
+	return result;
+}
+
+void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	using namespace Device;
 	using namespace CMD;
-	// create default Command Queue
-	cq.size = 32;
-	cq.start = (CQE*) cq_mem.virt;
 
-	// read Firmware Version
+	/* read Firmware version */
 	l4_uint32_t fw_rev = ioread32be(&init_seg->fw_rev);
 	l4_uint32_t cmd_rev = ioread32be(&init_seg->cmdif_rev_fw_sub);
 	l4_uint16_t fw_rev_major = fw_rev;
@@ -80,15 +234,6 @@ void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, MEM::HCA_PAGE_MEM& hca_page_mem, I
 		(l4_uint16_t)cmd_rev, (l4_uint16_t)(cmd_rev >> 16));
 
 	init_wait(&init_seg->initializing);
-
-	printf("\nInit_Seg\n");
-	printf("%.8x\n", ioread32be(&init_seg->fw_rev));
-	printf("%.8x\n", ioread32be(&init_seg->cmdif_rev_fw_sub));
-	printf("%.8x\n", ioread32be(&init_seg->padding0[0]));
-	printf("%.8x\n", ioread32be(&init_seg->padding0[1]));
-	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_msb));
-	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_lsb_info));
-	printf("\n");
 
 	l4_uint32_t info = ioread32be(&init_seg->cmdq_addr_lsb_info) & 0xff;
 	l4_uint8_t log_size = info >> 4 &0xf;
@@ -102,8 +247,8 @@ void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, MEM::HCA_PAGE_MEM& hca_page_mem, I
 		throw;
 	}
 
-	// write Command Queue Address to Device
-	l4_uint64_t addr = cq_mem.phys;
+	/* write Command Queue Address to Device */
+	l4_uint64_t addr = cq_mem->phys;
 	l4_uint32_t addr_lsb = addr & (~0x3ff);
 	l4_uint32_t addr_msb = (l4_uint64_t)addr >> 32;
 	addr_lsb = addr;
@@ -116,14 +261,13 @@ void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, MEM::HCA_PAGE_MEM& hca_page_mem, I
 	printf("ref: %.8x:%.8x\n", addr_msb, addr_lsb);
 	printf("addr_msb:addr_lsb: %.8x:%.8x\n", test1, test2);
 
-	// wait for initialization
+	/* wait for initialization */
 	init_wait(&init_seg->initializing);
 
 	printf("\nInit_Seg\n");
 	printf("%.8x\n", ioread32be(&init_seg->fw_rev));
 	printf("%.8x\n", ioread32be(&init_seg->cmdif_rev_fw_sub));
-	printf("%.8x\n", ioread32be(&init_seg->padding0[0]));
-	printf("%.8x\n", ioread32be(&init_seg->padding0[1]));
+	printf("...\n");
 	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_msb));
 	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_lsb_info));
 	printf("...\n");
@@ -132,79 +276,57 @@ void HCA::init_hca(CMD::CQ& cq, dma& dma_cap, MEM::HCA_PAGE_MEM& hca_page_mem, I
 
 	//TODO hardware health check
 
-	// INIT SEQUENCE
+	/* INIT SEQUENCE */
 	l4_uint32_t slot;
 
-	// ENABLE_HCA
+	/* ENABLE_HCA */
 	slot = create_cqe(cq, ENABLE_HCA, 0x0, nullptr, 0, nullptr, ENABLE_HCA_OUTPUT_LENGTH, nullptr);
-	printf("slot: %d\n", slot);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
 
-	// QUERY_ISSI
-	slot = create_cqe(cq, QUERY_ISSI, 0x0, nullptr, 0, nullptr, QUERY_ISSI_OUTPUT_LENGTH, &omb_mem);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	l4_uint32_t issi = configure_issi(cq, &init_seg->dbv, omb_mem);
+	printf("ISSI version: %d\n", issi);
 
-	// Setting ISSI to Version 1 if supported or else 0
-	l4_uint32_t issi = get_issi_support(omb_mem);
-	if (issi) issi = 1;
-	else throw std::runtime_error("ISSI version 1 not supported by Hardware");
-
-	// SET_ISSI
-	slot = create_cqe(cq, SET_ISSI, 0x0, &issi, 1, nullptr, SET_ISSI_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
-
-	printf("\nISSI version: %d\n", issi);
-
-	// QUERY_PAGES Boot
-	slot = create_cqe(cq, QUERY_PAGES, 0x1, nullptr, 0, nullptr, 16, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
-
-	// Provide Boot Pages
-	l4_uint32_t boot_page_count = get_number_of_pages(cq, slot);
+	l4_int32_t boot_page_count = provide_boot_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
 	printf("Boot Pages: %d\n", boot_page_count);
-	MEM::DMA_MEM* boot_page_mem = &hca_page_mem.page_mem[hca_page_mem.page_mem_count];
-	hca_page_mem.page_mem_count++;
-	*boot_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * boot_page_count);
-	provide_pages(cq, &init_seg->dbv, imb_mem, boot_page_mem, boot_page_count);
 
-	// QUERY_HCA_CAP
-	l4_uint32_t payload = 0;
-	slot = create_cqe(cq, QUERY_HCA_CAP, 0x0, &payload, 1, nullptr, 4112, &omb_mem);
+	bool set_driver = configure_hca_cap(cq, &init_seg->dbv, imb_mem, omb_mem);
+
+	l4_int32_t init_page_count = provide_init_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
+	printf("Init Pages: %d\n", init_page_count);
+
+
+	/* INIT_HCA */
+	slot = create_cqe(cq, INIT_HCA, 0x0, nullptr, 0, nullptr, INIT_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
+	printf("INIT_HCA successful\n");
 
-	// QUERY_PAGES Init
-	slot = create_cqe(cq, QUERY_PAGES, 0x2, nullptr, 0, nullptr, 16, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
-
-	// Provide Init Pages
-	l4_uint32_t init_page_count = get_number_of_pages(cq, slot);
-	printf("Init Pages: %d\n", get_number_of_pages(cq, slot));
-	MEM::DMA_MEM* init_page_mem = &hca_page_mem.page_mem[hca_page_mem.page_mem_count];
-	hca_page_mem.page_mem_count++;
-	*init_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * init_page_count);
-	provide_pages(cq, &init_seg->dbv, imb_mem, init_page_mem, init_page_count);
-
+	if (set_driver) set_driver_version(cq, &init_seg->dbv, imb_mem);
+	
+	printf("Initialization complete\n");
 }
 
-void HCA::teardown_hca(CMD::CQ& cq, HCA::Init_Seg* init_seg) {
+void HCA::teardown_hca(CMD::CQ& cq, HCA::Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
 	using namespace CMD;
 
 	l4_uint32_t slot;
 
-	// TEARDOWN_HCA
-	/*slot = create_cqe(cq, TEARDOWN_HCA, 0x0, nullptr, 0, nullptr, TEARDOWN_HCA_OUTPUT_LENGTH, nullptr);
+	/* TEARDOWN_HCA */
+	slot = create_cqe(cq, TEARDOWN_HCA, 0x0, nullptr, 0, nullptr, TEARDOWN_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);*/
+	validate_cqe(cq, &slot, 1);
+	printf("TEARDOWN_HCA successful\n");
 
-	// DISABLE_HCA
-	slot = create_cqe(cq, DISABLE_HCA, 0x0, nullptr, 0, nullptr, 8, nullptr);
+	l4_uint32_t reclaimed_pages = reclaim_pages(cq, &init_seg->dbv, omb_mem);
+	printf("Reclaimed Pages: %d\n", reclaimed_pages);
+
+	/* DISABLE_HCA */
+	slot = create_cqe(cq, DISABLE_HCA, 0x0, nullptr, 0, nullptr, DISABLE_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
 	debug_cmd(cq, slot);
+	printf("DISABLE_HCA successful\n");
+
+	printf("Teardown complete\n");
 }

@@ -24,30 +24,38 @@ cu32 CID_OPCODE_OFFSET      = 16;
 cu32 COD_STATUS_OFFSET      = 24;
 
 cu32 MAILBOX_ALIGN_SIZE = 0x1000;
-cu32 MBB_MAX_COUNT = 10;
+cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT;
+cu32 CMD_TIMEOUT_MS = 5000;
+cu32 testconst = 1;
 
-cu32 TEARDOWN_HCA_OUTPUT_LENGTH  = 8;
-cu32 ENABLE_HCA_OUTPUT_LENGTH    = 8;
-cu32 QUERY_ISSI_OUTPUT_LENGTH    = 112;
-cu32 SET_ISSI_OUTPUT_LENGTH      = 8;
+cu32 QUERY_HCA_CAP_OUTPUT_LENGTH        = 406;
+cu32 INIT_HCA_OUTPUT_LENGTH             = 0;
+cu32 TEARDOWN_HCA_OUTPUT_LENGTH         = 0;
+cu32 ENABLE_HCA_OUTPUT_LENGTH           = 0;
+cu32 DISABLE_HCA_OUTPUT_LENGTH          = 0;
+cu32 QUERY_PAGES_OUTPUT_LENGTH          = 2;
+cu32 SET_HCA_CAP_OUTPUT_LENGTH          = 2;
+cu32 QUERY_ISSI_OUTPUT_LENGTH           = 26;
+cu32 SET_ISSI_OUTPUT_LENGTH             = 0;
+cu32 SET_DRIVER_VERSION_OUTPUT_LENGTH   = 0;
 
 #pragma pack(4)
-// Command Input Data
+/* Command Input Data */
 struct CID {
     reg32 opcode = 0;
     reg32 op_mod = 0;
     reg32 data[2] = {0, 0};
 };
 
-// Command Output Data
+/* Command Output Data */
 struct COD {
     reg32 status = 0;
     reg32 syndrome = 0;
     reg32 output[2] = {0, 0};
 };
 
-// Command Queue Entry
+/* Command Queue Entry */
 struct CQE {
     reg32 type = 0;
     reg32 input_length = 0;
@@ -61,10 +69,10 @@ struct CQE {
     reg32 ctrl = 0;
 };
 
-// Mailbox Block
+/* Mailbox Block */
 struct MBB {
     reg32 mailbox_data[128];
-    reg32 padding[12];
+    reg32 rsvd[12];
     reg32 next_pointer_msb = 0;
     reg32 next_pointer_lsb = 0;
     reg32 block_number = 0;
@@ -72,7 +80,7 @@ struct MBB {
 };
 #pragma pack()
 
-// Command Queue Ring Buffer
+/* Command Queue Ring Buffer */
 struct CQ {
     CQE* start;
     l4_size_t size;
@@ -202,16 +210,18 @@ void check_cod_status(volatile COD* cod);
 
 void tie_mail_together(MEM::DMA_MEM* mailbox, l4_uint32_t mailbox_counter);
 
-void package_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
+void pack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
 
 l4_uint32_t create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
     l4_uint32_t* payload, l4_uint32_t payload_length, MEM::DMA_MEM* input_mailbox,
     l4_uint32_t output_length, MEM::DMA_MEM* output_mailbox);
 
+void unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
+
+void get_cmd_output(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length);
+
 void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count);
 
 void validate_cqe(volatile CQ &cq, l4_uint32_t* slots, int count);
-
-void clear_mailbox(MEM::DMA_MEM* mailbox);
 
 }

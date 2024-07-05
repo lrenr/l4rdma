@@ -41,7 +41,7 @@ l4_uint8_t* Device::map_pci_bar(L4vbus::Pci_dev& dev, unsigned int idx) {
 
     printf("mapping pci bar...\n");
 
-    // disable mem & io spaces
+    /* disable mem & io spaces */
     L4Re::chksys(dev.cfg_read(0x04, &cmd, 32));
     cmd &= 0xfffffffc;
     cmd |= 1 << 2;
@@ -52,7 +52,7 @@ l4_uint8_t* Device::map_pci_bar(L4vbus::Pci_dev& dev, unsigned int idx) {
     L4Re::chksys(dev.cfg_read(0x10 + idx * 4, &lsb_size, 32));
     L4Re::chksys(dev.cfg_write(0x10 + idx * 4, lsb_addr, 32));
     if (lsb_addr & 0x4) {
-        // 64-bit MEM-BAR
+        /* 64-bit MEM-BAR */
         L4Re::chksys(dev.cfg_read(0x14 + idx * 4, &msb_addr, 32));
         L4Re::chksys(dev.cfg_write(0x14 + idx * 4, msb_size, 32));
         L4Re::chksys(dev.cfg_read(0x14 + idx * 4, &msb_size, 32));
@@ -63,16 +63,16 @@ l4_uint8_t* Device::map_pci_bar(L4vbus::Pci_dev& dev, unsigned int idx) {
         bar_size += lsb_size & 0xfffffff0;
         bar_size = ~bar_size + 1;
     } else if (lsb_addr & 0x1) {
-        // 32-bit IO-BAR
+        /* 32-bit IO-BAR */
         bar_addr = lsb_addr & 0xfffffffc;
         bar_size = (~(lsb_size & 0xfffffffc)) + 1;
     } else {
-        // 32-bit MEM-BAR
+        /* 32-bit MEM-BAR */
         bar_addr = lsb_addr & 0xfffffff0;
         bar_size = (~(lsb_size & 0xfffffff0)) + 1;
     }
 
-    // reenable mem & io spaces
+    /* reenable mem & io spaces */
     L4Re::chksys(dev.cfg_read(0x04, &cmd, 32));
     cmd &= 0xfffffffc;
     cmd += 0x00000003;
@@ -81,7 +81,7 @@ l4_uint8_t* Device::map_pci_bar(L4vbus::Pci_dev& dev, unsigned int idx) {
     printf("addr: %.16llx\n", bar_addr);
     printf("size: %.16llx\n", bar_size);
 
-    // map BAR address space into local dataspace
+    /* map BAR address space into local dataspace */
     l4_addr_t mem_addr;
     L4::Cap<L4Re::Dataspace> ds = L4::cap_reinterpret_cast<L4Re::Dataspace>(dev.bus_cap());
     L4Re::chksys(L4Re::Env::env()->rm()->attach(
@@ -97,7 +97,6 @@ l4_uint8_t* Device::map_pci_bar(L4vbus::Pci_dev& dev, unsigned int idx) {
 L4Re::Util::Shared_cap<L4Re::Dma_space> Device::bind_dma_space_to_device(L4vbus::Pci_dev& dev) {
     l4vbus_device_t devinfo;
 	L4Re::chksys(dev.device(&devinfo));
-	printf("1\n");
 
 	unsigned int i;
 	l4vbus_resource_t res;
@@ -111,14 +110,9 @@ L4Re::Util::Shared_cap<L4Re::Dma_space> Device::bind_dma_space_to_device(L4vbus:
 	if (i == devinfo.num_resources)
 		throw;
 
-	printf("2\n");
-
-	//L4::Cap<L4Re::Dma_space> dma_cap = L4Re::chkcap(L4Re::Util::cap_alloc.alloc<L4Re::Dma_space>(), "Failed to allocate capability slot.");
     L4Re::Util::Shared_cap<L4Re::Dma_space> dma_cap = L4Re::chkcap(L4Re::Util::make_shared_cap<L4Re::Dma_space>(), "Failed to allocate capability slot.");
 
 	L4Re::chksys(L4Re::Env::env()->user_factory()->create(dma_cap.get()), "Failed to create DMA space.");
-
-	printf("3\n");
 
 	// This is the step where we bind the DMA domain of the device to the
 	// DMA space we just created for this task. The first argument to the
@@ -126,8 +120,6 @@ L4Re::Util::Shared_cap<L4Re::Dma_space> Device::bind_dma_space_to_device(L4vbus:
 	// the DMA domain found in the set of device resources.
 	// TODO: We could also choose the DMA domain of the whole vbus with ~0x0...
 	L4Re::chksys(dev.bus_cap()->assign_dma_domain(res.start, L4VBUS_DMAD_BIND | L4VBUS_DMAD_L4RE_DMA_SPACE, dma_cap.get()), "Failed to bind to device's DMA domain.");
-
-	printf("4\n");
 
     return dma_cap;
 }

@@ -19,11 +19,11 @@ struct DMA_MEM {
     L4Re::Dma_space::Dma_addr phys;
 };
 
-struct HCA_PAGE_MEM {
-    DMA_MEM page_mem[64];
-    l4_uint32_t page_mem_count = 0;
+struct HCA_DMA_MEM {
+    DMA_MEM dma_mem[64];
+    l4_uint32_t dma_mem_count = 0;
 };
 
-DMA_MEM alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space> &dma_cap, l4_size_t size);
+DMA_MEM* alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space> &dma_cap, l4_size_t size, DMA_MEM* dma_mem);
 
 }
