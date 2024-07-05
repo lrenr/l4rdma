@@ -27,8 +27,8 @@ l4_uint32_t HCA::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_ME
 	l4_uint32_t issi_out[QUERY_ISSI_OUTPUT_LENGTH];
 	get_cmd_output(cq, slot, omb_mem, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
 
-	int start = 6, end = 19, pos = 0, count = 0;
-	for (int i = end; i >= start; i--) {
+	l4_uint32_t start = 6, end = QUERY_ISSI_OUTPUT_LENGTH - 1, pos = 0, count = 0;
+	for (l4_uint32_t i = end; i >= start; i--) {
 		if ((pos = ffs(issi_out[i]))) break;
 		count++;
 	}
