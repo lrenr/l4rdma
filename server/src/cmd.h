@@ -170,22 +170,22 @@ enum OPCODE {
 };
 
 enum CMD_STATUS {
-	CMD_STATUS_OK			            = 0x0,
-	CMD_STATUS_INT_ERR			        = 0x1,
-	CMD_STATUS_BAD_OP_ERR		        = 0x2,
-	CMD_STATUS_BAD_PARAM_ERR		    = 0x3,
-	CMD_STATUS_BAD_SYS_STATE_ERR	    = 0x4,
-	CMD_STATUS_BAD_RES_ERR		        = 0x5,
-	CMD_STATUS_RES_BUSY			        = 0x6,
-	CMD_STATUS_LIM_ERR			        = 0x8,
-	CMD_STATUS_BAD_RES_STATE_ERR	    = 0x9,
-	CMD_STATUS_IX_ERR			        = 0xa,
-	CMD_STATUS_NO_RES_ERR		        = 0xf,
-	CMD_STATUS_BAD_INP_LEN_ERR		    = 0x50,
-	CMD_STATUS_BAD_OUTP_LEN_ERR		    = 0x51,
-	CMD_STATUS_BAD_QP_STATE_ERR		    = 0x10,
-	CMD_STATUS_BAD_PKT_ERR		        = 0x30,
-	CMD_STATUS_BAD_SIZE_OUTS_CQES_ERR	= 0x40,
+	CMD_STATUS_OK                       = 0x0,
+	CMD_STATUS_INT_ERR                  = 0x1,
+	CMD_STATUS_BAD_OP_ERR               = 0x2,
+	CMD_STATUS_BAD_PARAM_ERR            = 0x3,
+	CMD_STATUS_BAD_SYS_STATE_ERR        = 0x4,
+	CMD_STATUS_BAD_RES_ERR              = 0x5,
+	CMD_STATUS_RES_BUSY                 = 0x6,
+	CMD_STATUS_LIM_ERR                  = 0x8,
+	CMD_STATUS_BAD_RES_STATE_ERR        = 0x9,
+	CMD_STATUS_IX_ERR                   = 0xa,
+	CMD_STATUS_NO_RES_ERR               = 0xf,
+	CMD_STATUS_BAD_INP_LEN_ERR          = 0x50,
+	CMD_STATUS_BAD_OUTP_LEN_ERR         = 0x51,
+	CMD_STATUS_BAD_QP_STATE_ERR         = 0x10,
+	CMD_STATUS_BAD_PKT_ERR              = 0x30,
+	CMD_STATUS_BAD_SIZE_OUTS_CQES_ERR   = 0x40,
 };
 
 enum CQE_STATUS {
