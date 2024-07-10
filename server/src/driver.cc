@@ -307,7 +307,7 @@ void Driver::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_ME
 	printf("Initialization complete\n");
 }
 
-void Driver::teardown_hca(CMD::CQ& cq, HCA::Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
+void Driver::teardown_hca(CMD::CQ& cq, Driver::Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
 	using namespace CMD;
 
 	l4_uint32_t slot;
