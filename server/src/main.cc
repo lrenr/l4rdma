@@ -3,7 +3,7 @@
 #include <sys/mman.h>
 #include "interface.h"
 #include "device.h"
-#include "hca.h"
+#include "driver.h"
 #include "cmd.h"
 #include "mem.h"
 
@@ -35,8 +35,8 @@ int main(int argc, char **argv) {
 	MEM::DMA_MEM* omb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[2]);
 	hca_dma_mem.dma_mem_count += 3;
 
-	using namespace HCA;
-	Init_Seg* init_seg = (HCA::Init_Seg*)bar0;
+	using namespace Driver;
+	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
 	cq.size = 32;
 	cq.start = (CMD::CQE*)cq_mem->virt;
 	init_hca(cq, dma_cap, init_seg, cq_mem, imb_mem, omb_mem, hca_dma_mem);

@@ -4,7 +4,7 @@
 #include "mem.h"
 #include "cmd.h"
 
-namespace HCA {
+namespace Driver {
 
 #pragma pack(4)
 struct Init_Seg {
@@ -43,6 +43,6 @@ l4_uint32_t reclaim_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_me
 
 void init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-void teardown_hca(CMD::CQ& cq, HCA::Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
+void teardown_hca(CMD::CQ& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
 
 }
