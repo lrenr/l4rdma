@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <cstring>
 #include <stdexcept>
+#include <chrono>
+#include <thread>
 #include "driver.h"
 #include "device.h"
 #include "mem.h"
@@ -14,13 +16,17 @@ void Driver::debug_cmd(volatile CMD::CQ &cq, l4_uint32_t slot) {
 }
 
 void Driver::init_wait(reg32* initializing) {
-	l4_uint32_t init;
-	while (true) {
-		printf(".");
-		init = ioread32be(initializing);
-		if (!(init >> 31)) break;
+	using namespace std;
+	using namespace std::chrono;
+
+	l4_uint8_t init;
+	auto start = high_resolution_clock::now();
+	while ((init = ioread32be(initializing) >> 31)) {
+		auto now = high_resolution_clock::now();
+		if (duration_cast<milliseconds>(now - start).count() >= INIT_TIMEOUT_MS)
+			throw runtime_error("Init Timeout");
+		this_thread::sleep_for(milliseconds(20));
 	}
-	printf("\n");
 }
 
 l4_uint32_t Driver::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem) {
@@ -225,6 +231,8 @@ void Driver::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_ME
 	using namespace Device;
 	using namespace CMD;
 
+	printf("Initializing ...\n\n");
+
 	/* read Firmware version */
 	l4_uint32_t fw_rev = ioread32be(&init_seg->fw_rev);
 	l4_uint32_t cmd_rev = ioread32be(&init_seg->cmdif_rev_fw_sub);
@@ -283,50 +291,61 @@ void Driver::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_ME
 	slot = create_cqe(cq, ENABLE_HCA, 0x0, nullptr, 0, nullptr, ENABLE_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
+	printf("ENABLE_HCA successful\n\n");
 
+	printf("configuring ISSI ...\n");
 	l4_uint32_t issi = configure_issi(cq, &init_seg->dbv, omb_mem);
-	printf("ISSI version: %d\n", issi);
+	printf("ISSI version: %d\n\n", issi);
 
+	printf("providing Boot Pages ...\n");
 	l4_int32_t boot_page_count = provide_boot_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
-	printf("Boot Pages: %d\n", boot_page_count);
+	printf("Boot Pages: %d\n\n", boot_page_count);
 
+	printf("configuring HCA capabilities ...\n");
 	bool set_driver = configure_hca_cap(cq, &init_seg->dbv, imb_mem, omb_mem);
+	printf("\n");
 
+	printf("providing Init Pages ...\n");
 	l4_int32_t init_page_count = provide_init_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
-	printf("Init Pages: %d\n", init_page_count);
+	printf("Init Pages: %d\n\n", init_page_count);
 
 
 	/* INIT_HCA */
 	slot = create_cqe(cq, INIT_HCA, 0x0, nullptr, 0, nullptr, INIT_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
-	printf("INIT_HCA successful\n");
+	printf("INIT_HCA successful\n\n");
 
+	printf("setting driver version ...\n");
 	if (set_driver) set_driver_version(cq, &init_seg->dbv, imb_mem);
-	
-	printf("Initialization complete\n");
+	printf("\n");
+
+	printf("Initialization complete\n\n");
 }
 
-void Driver::teardown_hca(CMD::CQ& cq, Driver::Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
+void Driver::teardown_hca(CMD::CQ& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
 	using namespace CMD;
 
 	l4_uint32_t slot;
+
+	printf("Tearing Down ...\n\n");
 
 	/* TEARDOWN_HCA */
 	slot = create_cqe(cq, TEARDOWN_HCA, 0x0, nullptr, 0, nullptr, TEARDOWN_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
-	printf("TEARDOWN_HCA successful\n");
+	printf("TEARDOWN_HCA successful\n\n");
 
+	printf("reclaiming pages ...\n");
 	l4_uint32_t reclaimed_pages = reclaim_pages(cq, &init_seg->dbv, omb_mem);
-	printf("Reclaimed Pages: %d\n", reclaimed_pages);
+	printf("Reclaimed Pages: %d\n\n", reclaimed_pages);
 
 	/* DISABLE_HCA */
 	slot = create_cqe(cq, DISABLE_HCA, 0x0, nullptr, 0, nullptr, DISABLE_HCA_OUTPUT_LENGTH, nullptr);
 	ring_doorbell(&init_seg->dbv, &slot, 1);
 	validate_cqe(cq, &slot, 1);
-	debug_cmd(cq, slot);
-	printf("DISABLE_HCA successful\n");
+	//debug_cmd(cq, slot);
+	printf("DISABLE_HCA successful\n\n");
 
-	printf("Teardown complete\n");
+	printf("Teardown complete\n\n");
 }

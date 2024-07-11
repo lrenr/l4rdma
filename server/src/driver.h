@@ -6,6 +6,8 @@
 
 namespace Driver {
 
+cu32 INIT_TIMEOUT_MS = 5000;
+
 #pragma pack(4)
 struct Init_Seg {
     reg32 fw_rev;

@@ -39,7 +39,9 @@ int main(int argc, char **argv) {
 	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
 	cq.size = 32;
 	cq.start = (CMD::CQE*)cq_mem->virt;
+	printf("------------\n\n");
 	init_hca(cq, dma_cap, init_seg, cq_mem, imb_mem, omb_mem, hca_dma_mem);
+	printf("------------\n\n");
 	teardown_hca(cq, init_seg, omb_mem);
 
 	main_srv.loop();

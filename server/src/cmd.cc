@@ -12,11 +12,12 @@ void CMD::poll_ownership(volatile CQE* cqe) {
     using namespace std;
     using namespace std::chrono;
 
+	l4_uint8_t res;
     auto start = high_resolution_clock::now();
-    while (l4_uint8_t res = ioread32be(&cqe->ctrl) & CQE_OWNERSHIP_MASK) {
+    while ((res = ioread32be(&cqe->ctrl) & CQE_OWNERSHIP_MASK)) {
         auto now = high_resolution_clock::now();
         if (duration_cast<milliseconds>(now - start).count() >= CMD_TIMEOUT_MS)
-            throw std::runtime_error("CMD Timeout");
+            throw runtime_error("CMD Timeout");
         this_thread::sleep_for(milliseconds(20));
     }
 }
