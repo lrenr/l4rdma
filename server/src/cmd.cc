@@ -119,7 +119,7 @@ void CMD::pack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t len
     //TODO calculate mailbox block signatures
 }
 
-l4_uint32_t CMD::create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
+l4_uint32_t CMD::create_cqe(MEM::Queue<CMD::CQE>& cq, OPCODE opcode, l4_uint32_t op_mod,
     l4_uint32_t* payload, l4_uint32_t payload_length, MEM::DMA_MEM* input_mailbox,
     l4_uint32_t output_length, MEM::DMA_MEM* output_mailbox) {
     output_length = (output_length + 2) * 4;
@@ -162,10 +162,7 @@ l4_uint32_t CMD::create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
     iowrite32be(&cqe->output_length, output_length);
     iowrite32be(&cqe->ctrl, 1);
     
-    l4_uint32_t slot = cq.head;
-    cq.head++;
-    if (cq.head >= cq.size)
-        cq.head = 0;
+    l4_uint32_t slot = MEM::enqueue(cq);
     //printf("cq.head: %d | slot: %d\n", cq.head, slot);
     return slot;
 }
@@ -187,7 +184,7 @@ void CMD::unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t l
     }
 }
 
-void CMD::get_cmd_output(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length) {
+void CMD::get_cmd_output(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length) {
     CQE* cqe = &cq.start[slot];
     if (!output_length) return;
     output[0] = ioread32be(&cqe->cod.output[0]);
@@ -207,7 +204,7 @@ void CMD::ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
     printf("dbr: %.2d\n", dbr_num);*/
 }
 
-void CMD::validate_cqe(volatile CQ &cq, l4_uint32_t* slots, int count) {
+void CMD::validate_cqe(MEM::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count) {
     for (int i = 0; i < count; i++) {
         CQE* cqe = &cq.start[slots[i]];
         poll_ownership(cqe);

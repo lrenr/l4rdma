@@ -21,30 +21,30 @@ struct Init_Seg {
 };
 #pragma pack()
 
-void debug_cmd(volatile CMD::CQ &cq, l4_uint32_t slot);
+void debug_cmd(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot);
 
 void init_wait(reg32* initializing);
 
-l4_uint32_t get_issi_support(volatile CMD::CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem);
+l4_uint32_t get_issi_support(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem);
 
-l4_int32_t get_number_of_pages(volatile CMD::CQ &cq, l4_uint32_t slot);
+l4_int32_t get_number_of_pages(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot);
 
-void set_driver_version(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem);
+void set_driver_version(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem);
 
-l4_uint32_t configure_issi(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
+l4_uint32_t configure_issi(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
 
-bool configure_hca_cap(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem);
+bool configure_hca_cap(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem);
 
-void provide_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count);
+void provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count);
 
-l4_int32_t provide_boot_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_boot_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-l4_int32_t provide_init_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_init_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-l4_uint32_t reclaim_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
+l4_uint32_t reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
 
-void init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+void init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-void teardown_hca(CMD::CQ& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
+void teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
 
 }

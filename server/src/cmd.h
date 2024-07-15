@@ -80,13 +80,6 @@ struct MBB {
 };
 #pragma pack()
 
-/* Command Queue Ring Buffer */
-struct CQ {
-    CQE* start;
-    l4_size_t size;
-    l4_uint32_t head;
-};
-
 enum OPCODE {
     QUERY_HCA_CAP               = 0x100,
     QUERY_ADAPTER               = 0x101,
@@ -212,16 +205,16 @@ void tie_mail_together(MEM::DMA_MEM* mailbox, l4_uint32_t mailbox_counter);
 
 void pack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
 
-l4_uint32_t create_cqe(volatile CQ &cq, OPCODE opcode, l4_uint32_t op_mod,
+l4_uint32_t create_cqe(MEM::Queue<CMD::CQE>& cq, OPCODE opcode, l4_uint32_t op_mod,
     l4_uint32_t* payload, l4_uint32_t payload_length, MEM::DMA_MEM* input_mailbox,
     l4_uint32_t output_length, MEM::DMA_MEM* output_mailbox);
 
 void unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
 
-void get_cmd_output(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length);
+void get_cmd_output(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length);
 
 void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count);
 
-void validate_cqe(volatile CQ &cq, l4_uint32_t* slots, int count);
+void validate_cqe(MEM::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count);
 
 }

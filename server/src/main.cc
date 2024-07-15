@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 	l4_uint8_t *bar0 = Device::map_pci_bar(dev, 0);
 	printf("bar0:%p\n", bar0);
 
-	CMD::CQ cq;
+	MEM::Queue<CMD::CQE> cq;
 	dma dma_cap;
 	MEM::HCA_DMA_MEM hca_dma_mem;
 

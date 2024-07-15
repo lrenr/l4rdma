@@ -10,7 +10,7 @@
 using namespace CMD;
 using namespace Device;
 
-void Driver::debug_cmd(volatile CMD::CQ &cq, l4_uint32_t slot) {
+void Driver::debug_cmd(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot) {
 	reg32* entry = (reg32*)&cq.start[slot];
 	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&entry[i]));
 }
@@ -29,7 +29,7 @@ void Driver::init_wait(reg32* initializing) {
 	}
 }
 
-l4_uint32_t Driver::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::get_issi_support(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem) {
 	l4_uint32_t issi_out[QUERY_ISSI_OUTPUT_LENGTH];
 	get_cmd_output(cq, slot, omb_mem, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
 
@@ -43,14 +43,14 @@ l4_uint32_t Driver::get_issi_support(volatile CQ &cq, l4_uint32_t slot, MEM::DMA
 	return issi;
 }
 
-l4_int32_t Driver::get_number_of_pages(volatile CQ &cq, l4_uint32_t slot) {
+l4_int32_t Driver::get_number_of_pages(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot) {
 	l4_uint32_t pages_out[QUERY_ISSI_OUTPUT_LENGTH];
 	get_cmd_output(cq, slot, nullptr, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
 
 	return pages_out[1];
 }
 
-void Driver::set_driver_version(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem) {
+void Driver::set_driver_version(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem) {
 	l4_uint32_t slot;
 
 	l4_uint32_t driver[18];
@@ -66,7 +66,7 @@ void Driver::set_driver_version(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* 
 	validate_cqe(cq, &slot, 1);
 }
 
-l4_uint32_t Driver::configure_issi(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::configure_issi(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_ISSI */
@@ -88,7 +88,7 @@ l4_uint32_t Driver::configure_issi(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_ME
 	return issi;
 }
 
-bool Driver::configure_hca_cap(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem) {
+bool Driver::configure_hca_cap(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_HCA_CAP */
@@ -128,7 +128,7 @@ bool Driver::configure_hca_cap(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* i
 	return driver_version;
 }
 
-void Driver::provide_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
+void Driver::provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
 	l4_uint32_t slot;
 
     l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
@@ -163,7 +163,7 @@ void Driver::provide_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* imb_m
 	}
 }
 
-l4_int32_t Driver::provide_boot_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+l4_int32_t Driver::provide_boot_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Boot */
@@ -182,7 +182,7 @@ l4_int32_t Driver::provide_boot_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32*
 	return boot_page_count;
 }
 
-l4_int32_t Driver::provide_init_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+l4_int32_t Driver::provide_init_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Init */
@@ -201,7 +201,7 @@ l4_int32_t Driver::provide_init_pages(volatile CMD::CQ &cq, dma& dma_cap, reg32*
 	return init_page_count;
 }
 
-l4_uint32_t Driver::reclaim_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
 	l4_uint32_t slot;
 	l4_int32_t result = 0;
 
@@ -227,7 +227,7 @@ l4_uint32_t Driver::reclaim_pages(volatile CMD::CQ &cq, reg32* dbv, MEM::DMA_MEM
 	return result;
 }
 
-void Driver::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+void Driver::init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	using namespace Device;
 	using namespace CMD;
 
@@ -323,7 +323,7 @@ void Driver::init_hca(CMD::CQ& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_ME
 	printf("Initialization complete\n\n");
 }
 
-void Driver::teardown_hca(CMD::CQ& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
+void Driver::teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
 	using namespace CMD;
 
 	l4_uint32_t slot;

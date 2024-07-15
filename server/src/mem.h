@@ -24,6 +24,22 @@ struct HCA_DMA_MEM {
     l4_uint32_t dma_mem_count = 0;
 };
 
-DMA_MEM* alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space> &dma_cap, l4_size_t size, DMA_MEM* dma_mem);
+template<typename Q>
+struct Queue {
+    Q* start;
+    l4_size_t size;
+    l4_uint32_t head;
+};
+
+template<typename Q>
+l4_uint32_t enqueue(Queue<Q>& q) {
+    l4_uint32_t slot = q.head;
+    q.head++;
+    if (q.head >= q.size)
+        q.head = 0;
+    return slot;
+}
+
+DMA_MEM* alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);
 
 }
