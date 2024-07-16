@@ -1,7 +1,6 @@
 #pragma once
 
 #include <l4/re/env>
-#include "l4/sys/l4int.h"
 #include "mem.h"
 
 namespace CMD {
@@ -26,6 +25,7 @@ cu32 COD_STATUS_OFFSET      = 24;
 cu32 MAILBOX_ALIGN_SIZE = 0x1000;
 cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT;
+cu32 IMB_MAX_PAGE_PAYLOAD = 2 + ((IMB_MAX_DATA/2) * 2);
 cu32 CMD_TIMEOUT_MS = 5000;
 cu32 testconst = 1;
 
@@ -200,6 +200,8 @@ void poll_ownership(volatile CQE* cqe);
 void check_cqe_status(volatile CQE* cqe);
 
 void check_cod_status(volatile COD* cod);
+
+void prepare_mbb(volatile MBB* mailbox_block, l4_uint64_t phys_addr, l4_uint32_t block_number);
 
 void tie_mail_together(MEM::DMA_MEM* mailbox, l4_uint32_t mailbox_counter);
 

@@ -20,7 +20,7 @@ DMA_MEM* MEM::alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4
     
 	L4Re::chksys(L4Re::Env::env()->rm()->attach(&dma_mem->virt, size,
         L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
-        L4::Ipc::make_cap_rw(dma_mem->cap.get()), 0, L4_SUPERPAGESIZE),
+        L4::Ipc::make_cap_rw(dma_mem->cap.get()), 0, (unsigned char)L4_SUPERPAGESIZE),
         "Failed to attach DMA memory");
 
     L4Re::chksys(dma_cap->map(L4::Ipc::make_cap_rw(dma_mem->cap.get()), 0, &size,

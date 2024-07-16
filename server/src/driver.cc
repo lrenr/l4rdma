@@ -141,13 +141,15 @@ void Driver::provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* i
 
 	l4_uint32_t payload_page_count;
 	l4_uint64_t phys;
+	l4_uint32_t page_payload[IMB_MAX_PAGE_PAYLOAD];
+	l4_uint32_t payload_length;
 
 	for (l4_uint32_t i = 0; i < cmd_count; i++) {
 		if (i == cmd_count - 1) payload_page_count = remainder ? remainder/2 : IMB_MAX_DATA/2;
 		else payload_page_count = IMB_MAX_DATA/2;
 		
 		printf("payload_page_count: %d\n", payload_page_count);
-		l4_uint32_t page_payload[2 + (payload_page_count * 2)];
+		payload_length = 2 + (payload_page_count * 2);
 		page_payload[0] = 0;
 		page_payload[1] = payload_page_count;
 		for (l4_uint32_t j = 0; j < payload_page_count; j++) {
@@ -157,7 +159,7 @@ void Driver::provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* i
 		}
 
 		/* MANAGE_PAGES */
-		slot = create_cqe(cq, MANAGE_PAGES, 0x1, page_payload, 2 + (payload_page_count * 2), imb_mem, 2, nullptr);
+		slot = create_cqe(cq, MANAGE_PAGES, 0x1, page_payload, payload_length, imb_mem, 2, nullptr);
 		ring_doorbell(dbv, &slot, 1);
 		validate_cqe(cq, &slot, 1);
 	}

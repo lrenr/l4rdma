@@ -24,15 +24,15 @@ struct HCA_DMA_MEM {
     l4_uint32_t dma_mem_count = 0;
 };
 
-template<typename Q>
+template<typename QE>
 struct Queue {
-    Q* start;
+    QE* start;
     l4_size_t size;
     l4_uint32_t head;
 };
 
-template<typename Q>
-l4_uint32_t enqueue(Queue<Q>& q) {
+template<typename QE>
+l4_uint32_t enqueue(Queue<QE>& q) {
     l4_uint32_t slot = q.head;
     q.head++;
     if (q.head >= q.size)
