@@ -25,7 +25,6 @@ cu32 COD_STATUS_OFFSET      = 24;
 cu32 MAILBOX_ALIGN_SIZE = 0x1000;
 cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT;
-cu32 IMB_MAX_PAGE_PAYLOAD = 2 + ((IMB_MAX_DATA/2) * 2);
 cu32 CMD_TIMEOUT_MS = 5000;
 cu32 testconst = 1;
 

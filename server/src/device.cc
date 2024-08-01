@@ -3,6 +3,7 @@
 #include <l4/re/error_helper>
 #include <l4/re/util/cap_alloc>
 #include "device.h"
+#include "l4/sys/cxx/capability.h"
 
 L4vbus::Pci_dev Device::pci_get_dev(L4::Cap<L4vbus::Vbus> vbus)
 {
@@ -122,4 +123,72 @@ L4Re::Util::Shared_cap<L4Re::Dma_space> Device::bind_dma_space_to_device(L4vbus:
 	L4Re::chksys(dev.bus_cap()->assign_dma_domain(res.start, L4VBUS_DMAD_BIND | L4VBUS_DMAD_L4RE_DMA_SPACE, dma_cap.get()), "Failed to bind to device's DMA domain.");
 
     return dma_cap;
+}
+
+l4_uint32_t Device::get_pci_cap(L4vbus::Pci_dev& dev, l4_uint8_t target_cap_id) {
+    /* read status register */
+    l4_uint32_t status;
+    L4Re::chksys(dev.cfg_read(0x06, &status, 16));
+
+    /* check if cap list exists (Bit 4) */
+    if (!(status & 0x10)) return 0;
+
+    l4_uint32_t cap_ptr = 0x34 - 1, cap_id;
+    do {
+        /* read capabilities pointer */
+        L4Re::chksys(dev.cfg_read(cap_ptr + 1, &cap_ptr, 8));
+        /* mask the lowest 2 bits */
+        cap_ptr &= 0xfc;
+
+        /* read capability id */
+        L4Re::chksys(dev.cfg_read(cap_ptr, &cap_id, 8));
+        if (cap_id == target_cap_id) return cap_ptr;
+    } while (cap_ptr != 0);
+
+    return 0;
+}
+
+void Device::create_icu_cap(L4vbus::Pci_dev& dev, L4::Cap<L4::Icu>& icu) {
+    L4vbus::Icu vbus_icu;
+    auto vbus = dev.bus_cap();
+    if (vbus->root().device_by_hid(&vbus_icu, "L40009") < 0) throw;
+
+    icu = L4Re::chkcap(L4Re::Util::cap_alloc.alloc<L4::Icu>(), 
+        "Failed to allocate ICU capability");
+    
+    if (vbus_icu.vicu(icu) != 0) throw;
+    
+    l4_icu_info_t icu_info;
+    if (l4_error(icu->info(&icu_info)) < 0) throw;
+    printf("\nICU\nfeatures: %x | nr_irqs: %u | nr_msis: %u\n\n", 
+        icu_info.features, icu_info.nr_irqs, icu_info.nr_msis);
+}
+
+int Device::setup_msix(L4vbus::Pci_dev& dev, l4_uint32_t& table_offset, l4_uint32_t& bir, l4_uint32_t& table_size) {
+    l4_uint32_t msix_cap = get_pci_cap(dev, 0x11);
+    if (msix_cap == 0) return 1;
+
+    /* read MSI-X control register */
+    l4_uint32_t msix_ctrl;
+    L4Re::chksys(dev.cfg_read(msix_cap + 0x2, &msix_ctrl, 16));
+    
+    /* set enable Bit in the control register */
+    msix_ctrl |= 0x8000;
+    msix_ctrl &= 0xffffbfff;
+    L4Re::chksys(dev.cfg_write(msix_cap + 0x2, msix_ctrl, 16));
+
+    /* get Table Size */
+    table_size = msix_ctrl & 0x7ff;
+
+    /* read Table Offset and BIR */
+    l4_uint32_t table_pos;
+    L4Re::chksys(dev.cfg_read(msix_cap + 0x4, &table_pos, 32));
+    table_offset = table_pos & 0xfff8;
+    bir = table_pos & 0x7;
+
+    printf("table_size: %d | bir: %d | table_offset: %d\n", table_size, bir, table_offset);
+    fflush(stdout);
+
+    if (table_size == 0) return 1;
+    return 0;
 }

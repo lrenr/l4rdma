@@ -22,8 +22,21 @@ int main(int argc, char **argv) {
 	L4::Cap<L4vbus::Vbus> vbus = L4Re::Env::env()->get_cap<L4vbus::Vbus>("vbus_mlx");
 	if (!vbus.is_valid()) throw;
 	L4vbus::Pci_dev dev = Device::pci_get_dev(vbus);
-	l4_uint8_t *bar0 = Device::map_pci_bar(dev, 0);
+	l4_uint8_t* bar0 = Device::map_pci_bar(dev, 0);
 	printf("bar0:%p\n", bar0);
+
+	/* MSI-X Setup */
+	l4_uint32_t table_offset, bir, table_size;
+	if (Device::setup_msix(dev, table_offset, bir, table_size)) throw;
+	if (table_size + 1 < 10) throw;
+	/* map BAR that contains the MSI-X table */
+    l4_uint8_t* table_bar;
+	if(bir == 0) table_bar = bar0;
+	else table_bar = Device::map_pci_bar(dev, bir);
+	reg32* msix_table = (reg32*)(table_bar + table_offset);
+	L4::Cap<L4::Icu> icu;
+	Device::create_icu_cap(dev, icu);
+	l4_uint64_t icu_src = dev.dev_handle() | L4vbus::Icu::Src_dev_handle;
 
 	MEM::Queue<CMD::CQE> cq;
 	dma dma_cap;
@@ -39,8 +52,13 @@ int main(int argc, char **argv) {
 	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
 	cq.size = 32;
 	cq.start = (CMD::CQE*)cq_mem->virt;
+	
 	printf("------------\n\n");
 	init_hca(cq, dma_cap, init_seg, cq_mem, imb_mem, omb_mem, hca_dma_mem);
+	
+	printf("------------\n\n");
+	setup_event_queue(icu_src, msix_table, icu);
+
 	printf("------------\n\n");
 	teardown_hca(cq, init_seg, omb_mem);
 

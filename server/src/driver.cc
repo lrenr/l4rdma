@@ -3,9 +3,11 @@
 #include <stdexcept>
 #include <chrono>
 #include <thread>
+#include <pthread-l4.h>
 #include "driver.h"
 #include "device.h"
 #include "mem.h"
+#include "interrupt.h"
 
 using namespace CMD;
 using namespace Device;
@@ -350,4 +352,38 @@ void Driver::teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA
 	printf("DISABLE_HCA successful\n\n");
 
 	printf("Teardown complete\n\n");
+}
+
+void* page_request_handler(void* arg) {
+	Interrupt::IRQH_Args args = *(Interrupt::IRQH_Args*)arg;
+	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
+	fflush(stdout);
+
+	//args.irq->receive(L4_IPC_NEVER, l4_utcb());
+	printf("interrupt!\n");
+	fflush(stdout);
+
+	volatile bool t = true;
+	int c = 0;
+	while (t) {
+		c++;
+		if (c == 20000) {
+			printf(".");
+			c = 0;
+		}
+	}
+	//args.irq->detach(l4_utcb());
+
+	//pthread_exit(NULL);
+}
+
+void Driver::setup_event_queue(l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu) {
+	L4::Cap<L4::Irq> irq;
+	pthread_t handler_thread = Interrupt::create_msix_irq(icu_src, msix_table, 0, irq, icu, page_request_handler);
+
+	printf("before join\n");
+	fflush(stdout);
+	//pthread_join(&handler_thread, NULL);
+	printf("after join\n");
+	fflush(stdout);
 }

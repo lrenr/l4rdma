@@ -7,6 +7,7 @@
 namespace Driver {
 
 cu32 INIT_TIMEOUT_MS = 5000;
+cu32 IMB_MAX_PAGE_PAYLOAD = 2 + CMD::IMB_MAX_DATA;
 
 #pragma pack(4)
 struct Init_Seg {
@@ -46,5 +47,7 @@ l4_uint32_t reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* om
 void init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
 void teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
+
+void setup_event_queue(l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu);
 
 }

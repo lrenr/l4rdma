@@ -34,8 +34,7 @@ struct Queue {
 template<typename QE>
 l4_uint32_t enqueue(Queue<QE>& q) {
     l4_uint32_t slot = q.head;
-    q.head++;
-    if (q.head >= q.size)
+    if (++q.head >= q.size)
         q.head = 0;
     return slot;
 }
