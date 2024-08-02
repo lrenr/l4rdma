@@ -359,31 +359,27 @@ void* page_request_handler(void* arg) {
 	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
 	fflush(stdout);
 
-	//args.irq->receive(L4_IPC_NEVER, l4_utcb());
-	printf("interrupt!\n");
-	fflush(stdout);
+	L4::Cap<L4::Irq> irq = Interrupt::create_msix_irq(args.icu_src, args.msix_table,
+		args.irq_num, args.msix_vec_l4, args.icu);
 
-	volatile bool t = true;
-	int c = 0;
-	while (t) {
-		c++;
-		if (c == 20000) {
-			printf(".");
-			c = 0;
-		}
+	while (true) {
+		irq->receive(L4_IPC_NEVER, l4_utcb());
+		printf("interrupt!\n");
+		fflush(stdout);
 	}
-	//args.irq->detach(l4_utcb());
 
-	//pthread_exit(NULL);
+	irq->detach(l4_utcb());
+	printf("detach!\n");
+
+	pthread_exit(NULL);
 }
 
 void Driver::setup_event_queue(l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu) {
 	L4::Cap<L4::Irq> irq;
-	pthread_t handler_thread = Interrupt::create_msix_irq(icu_src, msix_table, 0, irq, icu, page_request_handler);
+	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, 0, icu, page_request_handler);
 
 	printf("before join\n");
 	fflush(stdout);
-	//pthread_join(&handler_thread, NULL);
+	pthread_join(handler_thread, NULL);
 	printf("after join\n");
-	fflush(stdout);
 }
