@@ -2,8 +2,26 @@
 
 #include <l4/re/env>
 #include "mem.h"
+#include "cmd.h"
 
 namespace Event {
+
+cu32 EQC_STATUS_MASK        = 0xf0000000;
+cu32 EQC_STATE_MASK         = 0x00000f00;
+cu32 EQC_UAR_MASK           = 0x00ffffff;
+cu32 EQC_LOG_EQ_SIZE_MASK   = 0x1f000000;
+cu32 EQC_INTR_MASK          = 0x000000ff;
+cu32 EQC_LOG_PAGE_SIZE_MASK = 0x1f000000;
+cu32 EQC_OWNERSHIP_MASK     = 0x00000001;
+
+cu32 EQC_STATUS_OFFSET          = 28;
+cu32 EQC_STATE_OFFSET           = 8;
+cu32 EQC_UAR_OFFSET             = 0;
+cu32 EQC_LOG_EQ_SIZE_OFFSET     = 24;
+cu32 EQC_INTR_OFFSET            = 0;
+cu32 EQC_LOG_PAGE_SIZE_OFFSET   = 24;
+
+cu32 PAGE_EQE_COUNT = HCA_PAGE_SIZE / 64;
 
 #pragma pack(4)
 struct EQE {
@@ -26,7 +44,18 @@ struct EQC {
     reg32 producer_counter = 0;
     reg32 rsvd3[4];
 };
+
+/* Event Queue Input Structure */
+struct EQI {
+    reg32 rsvd0[2];
+    EQC eqc;
+    reg32 rsvd1[2];
+    reg32 type[2];
+    reg32 rsvd2[44];
+};
 #pragma pack()
+
+cu32 EQI_SIZE = sizeof(EQI) / 4;
 
 enum EVENT_TYPE {
     EVENT_TYPE_COMPLETION_EVENT                = 0x0,
@@ -45,5 +74,15 @@ enum EQ_STATUS {
 };
 
 void init_eq(MEM::Queue<EQE>& eq);
+
+bool eqe_owned_by_hw(MEM::Queue<EQE>& eq);
+
+void read_eqe(MEM::Queue<EQE>& eq, l4_uint32_t* payload);
+
+void create_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap);
+
+l4_uint32_t get_eq_state(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq);
+
+void destroy_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq);
 
 }

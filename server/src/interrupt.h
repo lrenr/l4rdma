@@ -13,6 +13,7 @@ struct IRQH_Args {
     L4::Cap<L4::Icu> icu;
     l4_uint64_t icu_src;
     volatile l4_uint32_t* msix_table;
+    void* opt;
 };
 
 void create_msix_entry(l4_uint32_t irq_num, volatile l4_uint32_t* msix_table, l4_icu_msi_info_t info);
@@ -24,6 +25,6 @@ L4::Cap<L4::Irq> create_msix_irq(l4_uint64_t icu_src, volatile l4_uint32_t* msix
 
 pthread_t create_msix_thread(l4_uint64_t icu_src, volatile l4_uint32_t* msix_table,
     l4_uint32_t irq_num, L4::Cap<L4::Icu> icu,
-    void* (*handler_func)(void*));
+    void* (*handler_func)(void*), void* opt);
 
 }

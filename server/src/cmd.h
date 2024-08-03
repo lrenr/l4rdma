@@ -38,6 +38,8 @@ cu32 SET_HCA_CAP_OUTPUT_LENGTH          = 2;
 cu32 QUERY_ISSI_OUTPUT_LENGTH           = 26;
 cu32 SET_ISSI_OUTPUT_LENGTH             = 0;
 cu32 SET_DRIVER_VERSION_OUTPUT_LENGTH   = 0;
+cu32 CREATE_EQ_OUTPUT_LENGTH            = 2;
+cu32 DESTROY_EQ_OUTPUT_LENGTH           = 0;
 
 #pragma pack(4)
 /* Command Input Data */
@@ -194,6 +196,14 @@ enum CQE_STATUS {
     CQE_STATUS_BAD_TYPE     = 0x10,
 };
 
+/* All the things needed to execute commands */
+struct CMD_Args {
+    MEM::Queue<CMD::CQE> cq;
+    reg32* dbv;
+    MEM::DMA_MEM* imb_mem;
+    MEM::DMA_MEM* omb_mem;
+};
+
 void poll_ownership(volatile CQE* cqe);
 
 void check_cqe_status(volatile CQE* cqe);
@@ -206,13 +216,12 @@ void tie_mail_together(MEM::DMA_MEM* mailbox, l4_uint32_t mailbox_counter);
 
 void pack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
 
-l4_uint32_t create_cqe(MEM::Queue<CMD::CQE>& cq, OPCODE opcode, l4_uint32_t op_mod,
-    l4_uint32_t* payload, l4_uint32_t payload_length, MEM::DMA_MEM* input_mailbox,
-    l4_uint32_t output_length, MEM::DMA_MEM* output_mailbox);
+l4_uint32_t create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t op_mod,
+    l4_uint32_t* payload, l4_uint32_t payload_length, l4_uint32_t output_length);
 
 void unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t length);
 
-void get_cmd_output(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* mailbox, l4_uint32_t* output, l4_uint32_t output_length);
+void get_cmd_output(CMD::CMD_Args& cmd_args, l4_uint32_t slot, l4_uint32_t* output, l4_uint32_t output_length);
 
 void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count);
 

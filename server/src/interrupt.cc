@@ -54,7 +54,7 @@ L4::Cap<L4::Irq> Interrupt::create_msix_irq(l4_uint64_t icu_src, volatile l4_uin
 
 pthread_t Interrupt::create_msix_thread(l4_uint64_t icu_src, volatile l4_uint32_t* msix_table,
     l4_uint32_t irq_num, L4::Cap<L4::Icu> icu,
-    void* (*handler_func)(void*)) {
+    void* (*handler_func)(void*), void* opt) {
 
     pthread_t handler_thread;
     l4_uint32_t msix_vec_l4 = irq_num | L4::Icu::F_msi;
@@ -65,6 +65,7 @@ pthread_t Interrupt::create_msix_thread(l4_uint64_t icu_src, volatile l4_uint32_
     args.icu = icu;
     args.icu_src = icu_src;
     args.msix_table = msix_table;
+    args.opt = opt;
     
     pthread_create(&handler_thread, NULL, handler_func, &args);
 

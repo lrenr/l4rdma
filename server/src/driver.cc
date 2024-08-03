@@ -12,8 +12,8 @@
 using namespace CMD;
 using namespace Device;
 
-void Driver::debug_cmd(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot) {
-	reg32* entry = (reg32*)&cq.start[slot];
+void Driver::debug_cmd(CMD::CMD_Args& cmd_args, l4_uint32_t slot) {
+	reg32* entry = (reg32*)&cmd_args.cq.start[slot];
 	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&entry[i]));
 }
 
@@ -31,9 +31,9 @@ void Driver::init_wait(reg32* initializing) {
 	}
 }
 
-l4_uint32_t Driver::get_issi_support(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::get_issi_support(CMD::CMD_Args& cmd_args, l4_uint32_t slot) {
 	l4_uint32_t issi_out[QUERY_ISSI_OUTPUT_LENGTH];
-	get_cmd_output(cq, slot, omb_mem, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
+	get_cmd_output(cmd_args, slot, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
 
 	l4_uint32_t start = 6, end = QUERY_ISSI_OUTPUT_LENGTH - 1, pos = 0, count = 0;
 	for (l4_uint32_t i = end; i >= start; i--) {
@@ -45,14 +45,14 @@ l4_uint32_t Driver::get_issi_support(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot,
 	return issi;
 }
 
-l4_int32_t Driver::get_number_of_pages(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot) {
+l4_int32_t Driver::get_number_of_pages(CMD::CMD_Args& cmd_args, l4_uint32_t slot) {
 	l4_uint32_t pages_out[QUERY_ISSI_OUTPUT_LENGTH];
-	get_cmd_output(cq, slot, nullptr, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
+	get_cmd_output(cmd_args, slot, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
 
 	return pages_out[1];
 }
 
-void Driver::set_driver_version(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem) {
+void Driver::set_driver_version(CMD::CMD_Args& cmd_args) {
 	l4_uint32_t slot;
 
 	l4_uint32_t driver[18];
@@ -63,44 +63,44 @@ void Driver::set_driver_version(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_M
 	printf("\n");
 
 	/* SET_DRIVER_VERSION */
-	slot = create_cqe(cq, SET_DRIVER_VERSION, 0x0, driver, 18, imb_mem, SET_DRIVER_VERSION_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, SET_DRIVER_VERSION, 0x0, driver, 18, SET_DRIVER_VERSION_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 }
 
-l4_uint32_t Driver::configure_issi(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::configure_issi(CMD::CMD_Args& cmd_args) {
 	l4_uint32_t slot;
 
 	/* QUERY_ISSI */
-	slot = create_cqe(cq, QUERY_ISSI, 0x0, nullptr, 0, nullptr, QUERY_ISSI_OUTPUT_LENGTH, omb_mem);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, QUERY_ISSI, 0x0, nullptr, 0, QUERY_ISSI_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	/* Setting ISSI to Version 1 if supported or else 0 */
-	l4_uint32_t issi = get_issi_support(cq, slot, omb_mem);
+	l4_uint32_t issi = get_issi_support(cmd_args, slot);
 	printf("Supported ISSI version: %d\n", issi);
 	if (issi) issi = 1;
 	else throw std::runtime_error("ISSI version 1 not supported by Hardware");
 
 	/* SET_ISSI */
-	slot = create_cqe(cq, SET_ISSI, 0x0, &issi, 1, nullptr, SET_ISSI_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, SET_ISSI, 0x0, &issi, 1, SET_ISSI_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	return issi;
 }
 
-bool Driver::configure_hca_cap(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem) {
+bool Driver::configure_hca_cap(CMD::CMD_Args& cmd_args) {
 	l4_uint32_t slot;
 
 	/* QUERY_HCA_CAP */
 	l4_uint32_t payload = 0;
-	slot = create_cqe(cq, QUERY_HCA_CAP, 0x0, &payload, 1, nullptr, QUERY_HCA_CAP_OUTPUT_LENGTH, omb_mem);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, QUERY_HCA_CAP, 0x0, &payload, 1, QUERY_HCA_CAP_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	l4_uint32_t hca_cap[QUERY_HCA_CAP_OUTPUT_LENGTH];
-	get_cmd_output(cq, slot, omb_mem, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH);
+	get_cmd_output(cmd_args, slot, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH);
 
 	/* 0x1 = 128 byte Cache line size supported */
 	l4_uint32_t cache_line_128byte = (hca_cap[(0x2c / 4) + 2] >> 27) & 0x1;
@@ -123,14 +123,14 @@ bool Driver::configure_hca_cap(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_ME
 	printf("cache_line_128: %d | cmdif_support: %x | max_num_sq: %d | set_driver: %d\n", cache_line_128byte, cmdif_checksum, max_sq, driver_version);
 
 	/* SET_HCA_CAP */
-	slot = create_cqe(cq, SET_HCA_CAP, 0x0, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH, imb_mem, SET_HCA_CAP_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, SET_HCA_CAP, 0x0, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH, SET_HCA_CAP_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	return driver_version;
 }
 
-void Driver::provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
+void Driver::provide_pages(CMD::CMD_Args& cmd_args, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
 	l4_uint32_t slot;
 
     l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
@@ -161,51 +161,51 @@ void Driver::provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* i
 		}
 
 		/* MANAGE_PAGES */
-		slot = create_cqe(cq, MANAGE_PAGES, 0x1, page_payload, payload_length, imb_mem, 2, nullptr);
-		ring_doorbell(dbv, &slot, 1);
-		validate_cqe(cq, &slot, 1);
+		slot = create_cqe(cmd_args, MANAGE_PAGES, 0x1, page_payload, payload_length, 2);
+		ring_doorbell(cmd_args.dbv, &slot, 1);
+		validate_cqe(cmd_args.cq, &slot, 1);
 	}
 }
 
-l4_int32_t Driver::provide_boot_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+l4_int32_t Driver::provide_boot_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Boot */
-	slot = create_cqe(cq, QUERY_PAGES, 0x1, nullptr, 0, nullptr, QUERY_PAGES_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, QUERY_PAGES, 0x1, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	/* Provide Boot Pages */
-	l4_int32_t boot_page_count = get_number_of_pages(cq, slot);
+	l4_int32_t boot_page_count = get_number_of_pages(cmd_args, slot);
 	if (boot_page_count < 0) throw;
 
 	MEM::DMA_MEM* boot_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * boot_page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
 	hca_dma_mem.dma_mem_count++;
-	provide_pages(cq, dbv, imb_mem, boot_page_mem, boot_page_count);
+	provide_pages(cmd_args, boot_page_mem, boot_page_count);
 
 	return boot_page_count;
 }
 
-l4_int32_t Driver::provide_init_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+l4_int32_t Driver::provide_init_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Init */
-	slot = create_cqe(cq, QUERY_PAGES, 0x2, nullptr, 0, nullptr, QUERY_PAGES_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, QUERY_PAGES, 0x2, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 
 	/* Provide Init Pages */
-	l4_int32_t init_page_count = get_number_of_pages(cq, slot);
+	l4_int32_t init_page_count = get_number_of_pages(cmd_args, slot);
 	if (init_page_count < 0) throw;
 
 	MEM::DMA_MEM* init_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * init_page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
 	hca_dma_mem.dma_mem_count++;
-	provide_pages(cq, dbv, imb_mem, init_page_mem, init_page_count);
+	provide_pages(cmd_args, init_page_mem, init_page_count);
 
 	return init_page_count;
 }
 
-l4_uint32_t Driver::reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem) {
+l4_uint32_t Driver::reclaim_pages(CMD::CMD_Args& cmd_args) {
 	l4_uint32_t slot;
 	l4_int32_t result = 0;
 
@@ -218,11 +218,11 @@ l4_uint32_t Driver::reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA
 	CQE* cqe;
 	do {
 		/* MANAGE_PAGES Reclaim */
-		slot = create_cqe(cq, MANAGE_PAGES, 0x2, payload, 2, nullptr, output_length, omb_mem);
-		ring_doorbell(dbv, &slot, 1);
-		validate_cqe(cq, &slot, 1);
+		slot = create_cqe(cmd_args, MANAGE_PAGES, 0x2, payload, 2, output_length);
+		ring_doorbell(cmd_args.dbv, &slot, 1);
+		validate_cqe(cmd_args.cq, &slot, 1);
 
-		cqe = &cq.start[slot];
+		cqe = &cmd_args.cq.start[slot];
 		reclaim_page_count = (l4_int32_t)ioread32be(&cqe->cod.output[0]);
 		printf("reclaiming: %d\n", reclaim_page_count);
 		result += reclaim_page_count;
@@ -231,7 +231,7 @@ l4_uint32_t Driver::reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA
 	return result;
 }
 
-void Driver::init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
+void Driver::init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::HCA_DMA_MEM& hca_dma_mem) {
 	using namespace Device;
 	using namespace CMD;
 
@@ -292,42 +292,42 @@ void Driver::init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg
 	l4_uint32_t slot;
 
 	/* ENABLE_HCA */
-	slot = create_cqe(cq, ENABLE_HCA, 0x0, nullptr, 0, nullptr, ENABLE_HCA_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, ENABLE_HCA, 0x0, nullptr, 0, ENABLE_HCA_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 	printf("ENABLE_HCA successful\n\n");
 
 	printf("configuring ISSI ...\n");
-	l4_uint32_t issi = configure_issi(cq, &init_seg->dbv, omb_mem);
+	l4_uint32_t issi = configure_issi(cmd_args);
 	printf("ISSI version: %d\n\n", issi);
 
 	printf("providing Boot Pages ...\n");
-	l4_int32_t boot_page_count = provide_boot_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
+	l4_int32_t boot_page_count = provide_boot_pages(cmd_args, dma_cap, hca_dma_mem);
 	printf("Boot Pages: %d\n\n", boot_page_count);
 
 	printf("configuring HCA capabilities ...\n");
-	bool set_driver = configure_hca_cap(cq, &init_seg->dbv, imb_mem, omb_mem);
+	bool set_driver = configure_hca_cap(cmd_args);
 	printf("\n");
 
 	printf("providing Init Pages ...\n");
-	l4_int32_t init_page_count = provide_init_pages(cq, dma_cap, &init_seg->dbv, imb_mem, hca_dma_mem);
+	l4_int32_t init_page_count = provide_init_pages(cmd_args, dma_cap, hca_dma_mem);
 	printf("Init Pages: %d\n\n", init_page_count);
 
 
 	/* INIT_HCA */
-	slot = create_cqe(cq, INIT_HCA, 0x0, nullptr, 0, nullptr, INIT_HCA_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, INIT_HCA, 0x0, nullptr, 0, INIT_HCA_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 	printf("INIT_HCA successful\n\n");
 
 	printf("setting driver version ...\n");
-	if (set_driver) set_driver_version(cq, &init_seg->dbv, imb_mem);
+	if (set_driver) set_driver_version(cmd_args);
 	printf("\n");
 
 	printf("Initialization complete\n\n");
 }
 
-void Driver::teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem) {
+void Driver::teardown_hca(CMD::CMD_Args& cmd_args) {
 	using namespace CMD;
 
 	l4_uint32_t slot;
@@ -335,36 +335,62 @@ void Driver::teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA
 	printf("Tearing Down ...\n\n");
 
 	/* TEARDOWN_HCA */
-	slot = create_cqe(cq, TEARDOWN_HCA, 0x0, nullptr, 0, nullptr, TEARDOWN_HCA_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, TEARDOWN_HCA, 0x0, nullptr, 0, TEARDOWN_HCA_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 	printf("TEARDOWN_HCA successful\n\n");
 
 	printf("reclaiming pages ...\n");
-	l4_uint32_t reclaimed_pages = reclaim_pages(cq, &init_seg->dbv, omb_mem);
+	l4_uint32_t reclaimed_pages = reclaim_pages(cmd_args);
 	printf("Reclaimed Pages: %d\n\n", reclaimed_pages);
 
 	/* DISABLE_HCA */
-	slot = create_cqe(cq, DISABLE_HCA, 0x0, nullptr, 0, nullptr, DISABLE_HCA_OUTPUT_LENGTH, nullptr);
-	ring_doorbell(&init_seg->dbv, &slot, 1);
-	validate_cqe(cq, &slot, 1);
+	slot = create_cqe(cmd_args, DISABLE_HCA, 0x0, nullptr, 0, DISABLE_HCA_OUTPUT_LENGTH);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
 	//debug_cmd(cq, slot);
 	printf("DISABLE_HCA successful\n\n");
 
 	printf("Teardown complete\n\n");
 }
 
-void* page_request_handler(void* arg) {
+Driver::UAR Driver::alloc_uar(CMD_Args& cmd_args, l4_uint8_t* bar0) {
+	UAR uar;
+	l4_uint32_t slot, output[2];
+
+	/* ALLOC_UAR */
+	slot = create_cqe(cmd_args, ALLOC_UAR, 0x0, nullptr, 0, 2);
+	ring_doorbell(cmd_args.dbv, &slot, 1);
+	validate_cqe(cmd_args.cq, &slot, 1);
+	get_cmd_output(cmd_args, slot, output, 2);
+	uar.index = output[0];
+	printf("UAR: 0x%x %d\n", uar.index, uar.index);
+
+	uar.addr = (UAR_Page*)(bar0 + (HCA_PAGE_SIZE * uar.index));
+
+	return uar;
+}
+
+void* Driver::page_request_handler(void* arg) {
+	using namespace Event;
+
 	Interrupt::IRQH_Args args = *(Interrupt::IRQH_Args*)arg;
+	PRH_OPT opt = *(PRH_OPT*)args.opt;
+	MEM::Queue<EQE>* eq = opt.eq;
 	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
 	fflush(stdout);
 
-	L4::Cap<L4::Irq> irq = Interrupt::create_msix_irq(args.icu_src, args.msix_table,
-		args.irq_num, args.msix_vec_l4, args.icu);
+	L4::Cap<L4::Irq> irq = Interrupt::create_msix_irq(args.icu_src,
+		args.msix_table, args.irq_num, args.msix_vec_l4, args.icu);
 
-	while (true) {
+	while (opt.active) {
 		irq->receive(L4_IPC_NEVER, l4_utcb());
 		printf("interrupt!\n");
+		fflush(stdout);
+		if (eqe_owned_by_hw(*eq)) continue;
+		l4_uint32_t payload[7];
+		read_eqe(*eq, payload);
+		printf("num_pages: %d\n", payload[1]);
 		fflush(stdout);
 	}
 
@@ -374,9 +400,26 @@ void* page_request_handler(void* arg) {
 	pthread_exit(NULL);
 }
 
-void Driver::setup_event_queue(l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu) {
-	L4::Cap<L4::Irq> irq;
-	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, 0, icu, page_request_handler);
+void Driver::setup_event_queue(CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR uar) {
+	using namespace Event;
+
+	cu32 irq_num = 0;
+	MEM::Queue<EQE> eq;
+	eq.size = 4;
+	PRH_OPT opt;
+	opt.active = true;
+	opt.eq = &eq;
+	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, irq_num,
+		icu, page_request_handler, &opt);
+	
+	create_eq(cmd_args, eq, EVENT_TYPE_PAGE_REQUEST, irq_num, uar.index, hca_dma_mem, dma_cap);
+	l4_uint32_t state = get_eq_state(cmd_args, eq);
+	printf("eq_state: 0x%x\n", state);
+
+	iowrite32be(&uar.addr->eqn_arm_and_update_ci, eq.id << UAR_EQN_OFFSET & UAR_EQN_MASK);
+
+	state = get_eq_state(cmd_args, eq);
+	printf("eq_state: 0x%x\n", state);
 
 	printf("before join\n");
 	fflush(stdout);

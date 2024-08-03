@@ -28,7 +28,8 @@ template<typename QE>
 struct Queue {
     QE* start;
     l4_size_t size;
-    l4_uint32_t head;
+    l4_uint32_t head = 0;
+    l4_uint32_t id = 0;
 };
 
 template<typename QE>

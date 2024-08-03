@@ -3,11 +3,15 @@
 #include <l4/re/env>
 #include "mem.h"
 #include "cmd.h"
+#include "event.h"
 
 namespace Driver {
 
 cu32 INIT_TIMEOUT_MS = 5000;
 cu32 IMB_MAX_PAGE_PAYLOAD = 2 + CMD::IMB_MAX_DATA;
+
+cu32 UAR_EQN_MASK = 0xff000000;
+cu32 UAR_EQN_OFFSET = 24;
 
 #pragma pack(4)
 struct Init_Seg {
@@ -20,34 +24,58 @@ struct Init_Seg {
     reg32 rsvd1[120];
     reg32 initializing;
 };
+
+struct UAR_Page {
+    reg32 rsvd0[8];
+    reg32 cmdsn_and_cmd_and_cq_ci;
+    reg32 cq_n;
+    reg32 rsvd1[6];
+    reg32 eqn_arm_and_update_ci;
+    reg32 rsvd2[1];
+    reg32 eqn_and_update_ci;
+};
 #pragma pack()
 
-void debug_cmd(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot);
+struct PRH_OPT {
+    MEM::Queue<Event::EQE>* eq;
+    bool active;
+};
+
+struct UAR {
+    l4_uint32_t index;
+    UAR_Page* addr;
+};
+
+void debug_cmd(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
 
 void init_wait(reg32* initializing);
 
-l4_uint32_t get_issi_support(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot, MEM::DMA_MEM* omb_mem);
+l4_uint32_t get_issi_support(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
 
-l4_int32_t get_number_of_pages(MEM::Queue<CMD::CQE>& cq, l4_uint32_t slot);
+l4_int32_t get_number_of_pages(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
 
-void set_driver_version(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem);
+void set_driver_version(CMD::CMD_Args& cmd_args);
 
-l4_uint32_t configure_issi(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
+l4_uint32_t configure_issi(CMD::CMD_Args& cmd_args);
 
-bool configure_hca_cap(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem);
+bool configure_hca_cap(CMD::CMD_Args& cmd_args);
 
-void provide_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count);
+void provide_pages(CMD::CMD_Args& cmd_args, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count);
 
-l4_int32_t provide_boot_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_boot_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-l4_int32_t provide_init_pages(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, reg32* dbv, MEM::DMA_MEM* imb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_init_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-l4_uint32_t reclaim_pages(MEM::Queue<CMD::CQE>& cq, reg32* dbv, MEM::DMA_MEM* omb_mem);
+l4_uint32_t reclaim_pages(CMD::CMD_Args& cmd_args);
 
-void init_hca(MEM::Queue<CMD::CQE>& cq, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::DMA_MEM* imb_mem, MEM::DMA_MEM* omb_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+void init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
 
-void teardown_hca(MEM::Queue<CMD::CQE>& cq, Init_Seg* init_seg, MEM::DMA_MEM* omb_mem);
+void teardown_hca(CMD::CMD_Args& cmd_args);
 
-void setup_event_queue(l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu);
+UAR alloc_uar(CMD::CMD_Args& cmd_args, l4_uint8_t* bar0);
+
+void* page_request_handler(void* arg);
+
+void setup_event_queue(CMD::CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR uar);
 
 }
