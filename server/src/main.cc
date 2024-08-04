@@ -48,6 +48,33 @@ int main(int argc, char **argv) {
 	cmd_args.omb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[2]);
 	hca_dma_mem.dma_mem_count += 3;
 
+	MEM::MEM_Page_Pool mem_page_pool;
+    mem_page_pool.max = 102400;
+    mem_page_pool.size = 0;
+    mem_page_pool.block_size = 64;
+    mem_page_pool.block_count = 0;
+    mem_page_pool.alloc_block = MEM::alloc_block;
+    mem_page_pool.free_block = MEM::free_block;
+    mem_page_pool.meta.dma_cap = &dma_cap;
+    mem_page_pool.start = nullptr;
+
+	MEM::MEM_Page* mp = MEM::alloc_page(&mem_page_pool);
+	MEM::free_page(&mem_page_pool, mp->meta.phys);
+
+	UAR::UAR_Page_Pool uar_page_pool;
+	uar_page_pool.max = 1024;
+    uar_page_pool.size = 0;
+    uar_page_pool.block_size = 64;
+    uar_page_pool.block_count = 0;
+    uar_page_pool.alloc_block = UAR::alloc_block;
+    uar_page_pool.free_block = UAR::free_block;
+    uar_page_pool.meta.base.index = 4096;
+	uar_page_pool.meta.base.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * 4096));
+    uar_page_pool.start = nullptr;
+
+	UAR::UAR_Page* up = UAR::alloc_page(&uar_page_pool);
+	UAR::free_page(&uar_page_pool, up);
+
 	using namespace Driver;
 	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
 	cmd_args.dbv = &init_seg->dbv;
@@ -58,7 +85,7 @@ int main(int argc, char **argv) {
 	init_hca(cmd_args, dma_cap, init_seg, cq_mem, hca_dma_mem);
 	
 	printf("------------\n\n");
-	UAR uar = alloc_uar(cmd_args, bar0);
+	UAR::UAR uar = alloc_uar(cmd_args, bar0);
 	setup_event_queue(cmd_args, icu_src, msix_table, icu, hca_dma_mem, dma_cap, uar);
 
 	printf("------------\n\n");

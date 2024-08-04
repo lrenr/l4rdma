@@ -4,14 +4,12 @@
 #include "mem.h"
 #include "cmd.h"
 #include "event.h"
+#include "uar.h"
 
 namespace Driver {
 
 cu32 INIT_TIMEOUT_MS = 5000;
 cu32 IMB_MAX_PAGE_PAYLOAD = 2 + CMD::IMB_MAX_DATA;
-
-cu32 UAR_EQN_MASK = 0xff000000;
-cu32 UAR_EQN_OFFSET = 24;
 
 #pragma pack(4)
 struct Init_Seg {
@@ -24,26 +22,11 @@ struct Init_Seg {
     reg32 rsvd1[120];
     reg32 initializing;
 };
-
-struct UAR_Page {
-    reg32 rsvd0[8];
-    reg32 cmdsn_and_cmd_and_cq_ci;
-    reg32 cq_n;
-    reg32 rsvd1[6];
-    reg32 eqn_arm_and_update_ci;
-    reg32 rsvd2[1];
-    reg32 eqn_and_update_ci;
-};
 #pragma pack()
 
 struct PRH_OPT {
     MEM::Queue<Event::EQE>* eq;
     bool active;
-};
-
-struct UAR {
-    l4_uint32_t index;
-    UAR_Page* addr;
 };
 
 void debug_cmd(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
@@ -72,10 +55,10 @@ void init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg, MEM::DM
 
 void teardown_hca(CMD::CMD_Args& cmd_args);
 
-UAR alloc_uar(CMD::CMD_Args& cmd_args, l4_uint8_t* bar0);
+UAR::UAR alloc_uar(CMD::CMD_Args& cmd_args, l4_uint8_t* bar0);
 
 void* page_request_handler(void* arg);
 
-void setup_event_queue(CMD::CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR uar);
+void setup_event_queue(CMD::CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR::UAR uar);
 
 }

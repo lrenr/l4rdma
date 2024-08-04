@@ -105,7 +105,7 @@ bool Driver::configure_hca_cap(CMD::CMD_Args& cmd_args) {
 	/* 0x1 = 128 byte Cache line size supported */
 	l4_uint32_t cache_line_128byte = (hca_cap[(0x2c / 4) + 2] >> 27) & 0x1;
 	if (cache_line_128byte) hca_cap[(0x2c / 4) + 2] = 1 << 27;
-	
+
 	/* 0x0 = disable cmd signatures for input and output
 	   0x1 = enable cmd signature generation by hw for output
 	   0x3 = enable cmd signature checks for input */
@@ -133,7 +133,7 @@ bool Driver::configure_hca_cap(CMD::CMD_Args& cmd_args) {
 void Driver::provide_pages(CMD::CMD_Args& cmd_args, MEM::DMA_MEM* page_mem, l4_uint32_t page_count) {
 	l4_uint32_t slot;
 
-    l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
+	l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
 	l4_uint32_t remainder;
 	if ((remainder = (page_count*2)%IMB_MAX_DATA)) {
 		cmd_count++;
@@ -149,7 +149,7 @@ void Driver::provide_pages(CMD::CMD_Args& cmd_args, MEM::DMA_MEM* page_mem, l4_u
 	for (l4_uint32_t i = 0; i < cmd_count; i++) {
 		if (i == cmd_count - 1) payload_page_count = remainder ? remainder/2 : IMB_MAX_DATA/2;
 		else payload_page_count = IMB_MAX_DATA/2;
-		
+
 		printf("payload_page_count: %d\n", payload_page_count);
 		payload_length = 2 + (payload_page_count * 2);
 		page_payload[0] = 0;
@@ -267,11 +267,11 @@ void Driver::init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg,
 	addr_msb = (l4_uint64_t)addr >> 32;
 	iowrite32be(&init_seg->cmdq_addr_msb, addr_msb);
 	iowrite32be(&init_seg->cmdq_addr_lsb_info, addr_lsb);
-	l4_uint32_t test1 = ioread32be(&init_seg->cmdq_addr_msb);
-	l4_uint32_t test2 = ioread32be(&init_seg->cmdq_addr_lsb_info);
+	l4_uint32_t probe_addr_msb = ioread32be(&init_seg->cmdq_addr_msb);
+	l4_uint32_t probe_addr_lsb = ioread32be(&init_seg->cmdq_addr_lsb_info);
 	printf("og: %.16llx\n", addr);
 	printf("ref: %.8x:%.8x\n", addr_msb, addr_lsb);
-	printf("addr_msb:addr_lsb: %.8x:%.8x\n", test1, test2);
+	printf("addr_msb:addr_lsb: %.8x:%.8x\n", probe_addr_msb, probe_addr_lsb);
 
 	/* wait for initialization */
 	init_wait(&init_seg->initializing);
@@ -313,7 +313,6 @@ void Driver::init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg,
 	l4_int32_t init_page_count = provide_init_pages(cmd_args, dma_cap, hca_dma_mem);
 	printf("Init Pages: %d\n\n", init_page_count);
 
-
 	/* INIT_HCA */
 	slot = create_cqe(cmd_args, INIT_HCA, 0x0, nullptr, 0, INIT_HCA_OUTPUT_LENGTH);
 	ring_doorbell(cmd_args.dbv, &slot, 1);
@@ -354,8 +353,8 @@ void Driver::teardown_hca(CMD::CMD_Args& cmd_args) {
 	printf("Teardown complete\n\n");
 }
 
-Driver::UAR Driver::alloc_uar(CMD_Args& cmd_args, l4_uint8_t* bar0) {
-	UAR uar;
+UAR::UAR Driver::alloc_uar(CMD_Args& cmd_args, l4_uint8_t* bar0) {
+	UAR::UAR uar;
 	l4_uint32_t slot, output[2];
 
 	/* ALLOC_UAR */
@@ -366,7 +365,7 @@ Driver::UAR Driver::alloc_uar(CMD_Args& cmd_args, l4_uint8_t* bar0) {
 	uar.index = output[0];
 	printf("UAR: 0x%x %d\n", uar.index, uar.index);
 
-	uar.addr = (UAR_Page*)(bar0 + (HCA_PAGE_SIZE * uar.index));
+	uar.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * uar.index));
 
 	return uar;
 }
@@ -400,7 +399,7 @@ void* Driver::page_request_handler(void* arg) {
 	pthread_exit(NULL);
 }
 
-void Driver::setup_event_queue(CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR uar) {
+void Driver::setup_event_queue(CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR::UAR uar) {
 	using namespace Event;
 
 	cu32 irq_num = 0;
@@ -411,12 +410,12 @@ void Driver::setup_event_queue(CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* m
 	opt.eq = &eq;
 	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, irq_num,
 		icu, page_request_handler, &opt);
-	
+
 	create_eq(cmd_args, eq, EVENT_TYPE_PAGE_REQUEST, irq_num, uar.index, hca_dma_mem, dma_cap);
 	l4_uint32_t state = get_eq_state(cmd_args, eq);
 	printf("eq_state: 0x%x\n", state);
 
-	iowrite32be(&uar.addr->eqn_arm_and_update_ci, eq.id << UAR_EQN_OFFSET & UAR_EQN_MASK);
+	iowrite32be(&uar.addr->eqn_arm_and_update_ci, eq.id << UAR::UAR_EQN_OFFSET & UAR::UAR_EQN_MASK);
 
 	state = get_eq_state(cmd_args, eq);
 	printf("eq_state: 0x%x\n", state);

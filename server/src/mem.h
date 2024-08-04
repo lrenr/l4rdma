@@ -4,6 +4,7 @@
 #include <l4/re/dma_space>
 #include <l4/re/dataspace>
 #include <l4/re/util/shared_cap>
+#include "page.h"
 
 typedef const l4_uint32_t cu32;
 typedef volatile l4_uint32_t reg32;
@@ -23,6 +24,53 @@ struct HCA_DMA_MEM {
     DMA_MEM dma_mem[64];
     l4_uint32_t dma_mem_count = 0;
 };
+
+struct MEM_PPM {
+    dma* dma_cap;
+};
+
+struct MEM_BM {
+    DMA_MEM dma_mem;
+};
+
+struct MEM_PM {
+    void* virt;
+    L4Re::Dma_space::Dma_addr phys;
+};
+
+typedef PA::Page_Pool<MEM_PPM, MEM_BM, MEM_PM> MEM_Page_Pool;
+typedef PA::Page_Block<MEM_BM, MEM_PM> MEM_Page_Block;
+typedef PA::Page<MEM_BM, MEM_PM> MEM_Page;
+
+void alloc_block(MEM_Page_Pool* mpp);
+
+void free_block(MEM_Page_Pool* mpp, MEM_Page_Block* mpb);
+
+MEM_Page* find_page(MEM_Page_Pool* mpp, l4_uint64_t phys);
+
+inline MEM_Page* alloc_page(MEM_Page_Pool* mpp) {
+    return PA::alloc_page<MEM_PPM, MEM_BM, MEM_PM>(mpp);
+}
+
+inline void free_page(MEM_Page_Pool* mpp, l4_uint64_t phys) {
+    PA::free_page<MEM_PPM, MEM_BM, MEM_PM>(mpp, find_page(mpp, phys));
+}
+
+inline void remove_block_from_pool(MEM_Page_Pool* mpp, MEM_Page_Block* mpb) {
+    PA::remove_block_from_pool<MEM_PPM, MEM_BM, MEM_PM>(mpp, mpb);
+}
+
+inline void add_block_to_pool(MEM_Page_Pool* mpp, MEM_Page_Block* mpb) {
+    PA::add_block_to_pool<MEM_PPM, MEM_BM, MEM_PM>(mpp, mpb);
+}
+
+inline MEM_Page_Block* create_block(MEM_Page_Pool* mpp) {
+    return PA::create_block<MEM_PPM, MEM_BM, MEM_PM>(mpp);
+}
+
+inline void destroy_block(MEM_Page_Block* mpb) {
+    PA::destroy_block<MEM_BM, MEM_PM>(mpb);
+}
 
 template<typename QE>
 struct Queue {

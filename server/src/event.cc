@@ -50,7 +50,7 @@ void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type,
         payload[i] = ((l4_uint32_t*)&eqi)[i];
 
     MEM::DMA_MEM* eq_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
-	hca_dma_mem.dma_mem_count++;
+    hca_dma_mem.dma_mem_count++;
     l4_uint64_t phys;
     l4_uint32_t pas_offset;
     for (l4_uint32_t i = 0; i < page_count; i++) {
