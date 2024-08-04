@@ -25,6 +25,7 @@ cu32 COD_STATUS_OFFSET      = 24;
 cu32 MAILBOX_ALIGN_SIZE = 0x1000;
 cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT;
+cu32 OMB_MAX_DATA = 128 * MBB_MAX_COUNT;
 cu32 CMD_TIMEOUT_MS = 5000;
 cu32 testconst = 1;
 
@@ -200,8 +201,8 @@ enum CQE_STATUS {
 struct CMD_Args {
     MEM::Queue<CMD::CQE> cq;
     reg32* dbv;
-    MEM::DMA_MEM* imb_mem;
-    MEM::DMA_MEM* omb_mem;
+    MEM::DMA_MEM imb_mem;
+    MEM::DMA_MEM omb_mem;
 };
 
 void poll_ownership(volatile CQE* cqe);

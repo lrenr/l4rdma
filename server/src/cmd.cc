@@ -137,9 +137,9 @@ l4_uint32_t CMD::create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t 
             if (input_length > 16) {
                 /* input length overflow into mailbox
                    packaging payload (without first 8 bytes) into input mailbox */
-                pack_mail(cmd_args.imb_mem, &payload[2], payload_length - 2);
-                iowrite32be(&cqe->input_mailbox_msb, (l4_uint32_t)(cmd_args.imb_mem->phys >> 32));
-                iowrite32be(&cqe->input_mailbox_lsb, (l4_uint32_t)cmd_args.imb_mem->phys & CQE_MAILBOX_MASK);
+                pack_mail(&cmd_args.imb_mem, &payload[2], payload_length - 2);
+                iowrite32be(&cqe->input_mailbox_msb, (l4_uint32_t)(cmd_args.imb_mem.phys >> 32));
+                iowrite32be(&cqe->input_mailbox_lsb, (l4_uint32_t)cmd_args.imb_mem.phys & CQE_MAILBOX_MASK);
             }
         }
     }
@@ -154,9 +154,9 @@ l4_uint32_t CMD::create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t 
             mailbox_counter = omb_length / mbb_bytes;
             if (!(omb_length % mbb_bytes)) mailbox_counter--;
         }
-        tie_mail_together(cmd_args.omb_mem, mailbox_counter);
-        iowrite32be(&cqe->output_mailbox_msb, (l4_uint32_t)(cmd_args.omb_mem->phys >> 32));
-        iowrite32be(&cqe->output_mailbox_lsb, (l4_uint32_t)cmd_args.omb_mem->phys & CQE_MAILBOX_MASK);
+        tie_mail_together(&cmd_args.omb_mem, mailbox_counter);
+        iowrite32be(&cqe->output_mailbox_msb, (l4_uint32_t)(cmd_args.omb_mem.phys >> 32));
+        iowrite32be(&cqe->output_mailbox_lsb, (l4_uint32_t)cmd_args.omb_mem.phys & CQE_MAILBOX_MASK);
     }
     iowrite32be(&cqe->output_length, output_length);
     iowrite32be(&cqe->ctrl, 1);
@@ -188,7 +188,7 @@ void CMD::get_cmd_output(CMD::CMD_Args& cmd_args, l4_uint32_t slot, l4_uint32_t*
     output[0] = ioread32be(&cqe->cod.output[0]);
     if (output_length > 1) {
         output[1] = ioread32be(&cqe->cod.output[1]);
-        if (output_length > 2) unpack_mail(cmd_args.omb_mem, &output[2], output_length - 2);
+        if (output_length > 2) unpack_mail(&cmd_args.omb_mem, &output[2], output_length - 2);
     }
 }
 

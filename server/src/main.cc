@@ -38,58 +38,57 @@ int main(int argc, char **argv) {
 	Device::create_icu_cap(dev, icu);
 	l4_uint64_t icu_src = dev.dev_handle() | L4vbus::Icu::Src_dev_handle;
 
-	CMD::CMD_Args cmd_args;
+	Driver::MLX5_Context ctx;
 	dma dma_cap;
-	MEM::HCA_DMA_MEM hca_dma_mem;
 
 	dma_cap = Device::bind_dma_space_to_device(dev);
-	MEM::DMA_MEM* cq_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE, &hca_dma_mem.dma_mem[0]);
-	cmd_args.imb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[1]);
-	cmd_args.omb_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &hca_dma_mem.dma_mem[2]);
-	hca_dma_mem.dma_mem_count += 3;
+	MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE, &ctx.cmd_args.cq.dma_mem);
+	MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &ctx.cmd_args.imb_mem);
+	MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &ctx.cmd_args.omb_mem);
 
-	MEM::MEM_Page_Pool mem_page_pool;
-    mem_page_pool.max = 102400;
-    mem_page_pool.size = 0;
-    mem_page_pool.block_size = 64;
-    mem_page_pool.block_count = 0;
-    mem_page_pool.alloc_block = MEM::alloc_block;
-    mem_page_pool.free_block = MEM::free_block;
-    mem_page_pool.meta.dma_cap = &dma_cap;
-    mem_page_pool.start = nullptr;
+    ctx.mem_page_pool.max = 10240;
+    ctx.mem_page_pool.size = 0;
+    ctx.mem_page_pool.block_size = 1024;
+    ctx.mem_page_pool.block_count = 0;
+    ctx.mem_page_pool.alloc_block = MEM::alloc_block;
+    ctx.mem_page_pool.free_block = MEM::free_block;
+    ctx.mem_page_pool.data.dma_cap = &dma_cap;
+    ctx.mem_page_pool.start = nullptr;
 
-	MEM::MEM_Page* mp = MEM::alloc_page(&mem_page_pool);
-	MEM::free_page(&mem_page_pool, mp->meta.phys);
+	MEM::MEM_Page* mp = MEM::alloc_page(&ctx.mem_page_pool);
+	MEM::free_page(&ctx.mem_page_pool, mp->data.phys);
 
-	UAR::UAR_Page_Pool uar_page_pool;
-	uar_page_pool.max = 1024;
-    uar_page_pool.size = 0;
-    uar_page_pool.block_size = 64;
-    uar_page_pool.block_count = 0;
-    uar_page_pool.alloc_block = UAR::alloc_block;
-    uar_page_pool.free_block = UAR::free_block;
-    uar_page_pool.meta.base.index = 4096;
-	uar_page_pool.meta.base.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * 4096));
-    uar_page_pool.start = nullptr;
+	ctx.uar_page_pool.max = 1024;
+    ctx.uar_page_pool.size = 0;
+    ctx.uar_page_pool.block_size = 64;
+    ctx.uar_page_pool.block_count = 0;
+    ctx.uar_page_pool.alloc_block = UAR::alloc_block;
+    ctx.uar_page_pool.free_block = UAR::free_block;
+    ctx.uar_page_pool.data.base.index = 4096;
+	ctx.uar_page_pool.data.base.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * 4096));
+    ctx.uar_page_pool.start = nullptr;
 
-	UAR::UAR_Page* up = UAR::alloc_page(&uar_page_pool);
-	UAR::free_page(&uar_page_pool, up);
+	UAR::UAR_Page* up = UAR::alloc_page(&ctx.uar_page_pool);
+	UAR::free_page(&ctx.uar_page_pool, up);
+	up = UAR::alloc_page(&ctx.uar_page_pool);
+	UAR::free_page(&ctx.uar_page_pool, up);
 
 	using namespace Driver;
 	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
-	cmd_args.dbv = &init_seg->dbv;
-	cmd_args.cq.size = 32;
-	cmd_args.cq.start = (CMD::CQE*)cq_mem->virt;
+	ctx.cmd_args.dbv = &init_seg->dbv;
+	ctx.cmd_args.cq.size = 32;
+	ctx.cmd_args.cq.start = (CMD::CQE*)ctx.cmd_args.cq.dma_mem.virt;
 	
 	printf("------------\n\n");
-	init_hca(cmd_args, dma_cap, init_seg, cq_mem, hca_dma_mem);
+	init_hca(ctx, init_seg);
+	printf("pool_size: %llu | pool_block_count %llu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count);
 	
 	printf("------------\n\n");
-	UAR::UAR uar = alloc_uar(cmd_args, bar0);
-	setup_event_queue(cmd_args, icu_src, msix_table, icu, hca_dma_mem, dma_cap, uar);
+	//UAR::UAR uar = alloc_uar(ctx, bar0);
+	//setup_event_queue(ctx, icu_src, msix_table, icu, dma_cap, uar);
 
 	printf("------------\n\n");
-	teardown_hca(cmd_args);
+	teardown_hca(ctx);
 
 	main_srv.loop();
 

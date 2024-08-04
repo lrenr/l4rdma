@@ -79,7 +79,7 @@ bool eqe_owned_by_hw(MEM::Queue<EQE>& eq);
 
 void read_eqe(MEM::Queue<EQE>& eq, l4_uint32_t* payload);
 
-void create_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap);
+void create_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, dma& dma_cap);
 
 l4_uint32_t get_eq_state(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq);
 

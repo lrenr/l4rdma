@@ -24,41 +24,53 @@ struct Init_Seg {
 };
 #pragma pack()
 
+struct HCA_CAP {};
+
+struct MLX5_Context {
+    CMD::CMD_Args cmd_args;
+    HCA_CAP hca_cap;
+    UAR::UAR_Page_Pool uar_page_pool;
+    MEM::MEM_Page_Pool mem_page_pool;
+};
+
 struct PRH_OPT {
+    MLX5_Context* ctx;
     MEM::Queue<Event::EQE>* eq;
     bool active;
 };
 
-void debug_cmd(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
+void debug_cmd(MLX5_Context& ctx, l4_uint32_t slot);
 
 void init_wait(reg32* initializing);
 
-l4_uint32_t get_issi_support(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
+l4_uint32_t get_issi_support(MLX5_Context& ctx, l4_uint32_t slot);
 
-l4_int32_t get_number_of_pages(CMD::CMD_Args& cmd_args, l4_uint32_t slot);
+l4_int32_t get_number_of_pages(MLX5_Context& ctx, l4_uint32_t slot);
 
-void set_driver_version(CMD::CMD_Args& cmd_args);
+void set_driver_version(MLX5_Context& ctx);
 
-l4_uint32_t configure_issi(CMD::CMD_Args& cmd_args);
+l4_uint32_t configure_issi(MLX5_Context& ctx);
 
-bool configure_hca_cap(CMD::CMD_Args& cmd_args);
+bool configure_hca_cap(MLX5_Context& ctx);
 
-void provide_pages(CMD::CMD_Args& cmd_args, MEM::DMA_MEM* init_page_mem, l4_uint32_t init_page_count);
+void provide_pages(MLX5_Context& ctx, l4_uint32_t init_page_count);
 
-l4_int32_t provide_boot_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_boot_pages(MLX5_Context& ctx);
 
-l4_int32_t provide_init_pages(CMD::CMD_Args& cmd_args, dma& dma_cap, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_int32_t provide_init_pages(MLX5_Context& ctx);
 
-l4_uint32_t reclaim_pages(CMD::CMD_Args& cmd_args);
+l4_uint32_t reclaim_pages(MLX5_Context& ctx, l4_int32_t page_count);
 
-void init_hca(CMD::CMD_Args& cmd_args, dma& dma_cap, Init_Seg* init_seg, MEM::DMA_MEM* cq_mem, MEM::HCA_DMA_MEM& hca_dma_mem);
+l4_uint32_t reclaim_all_pages(MLX5_Context& ctx);
 
-void teardown_hca(CMD::CMD_Args& cmd_args);
+void init_hca(MLX5_Context& ctx, Init_Seg* init_seg);
 
-UAR::UAR alloc_uar(CMD::CMD_Args& cmd_args, l4_uint8_t* bar0);
+void teardown_hca(MLX5_Context& ctx);
+
+UAR::UAR alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0);
 
 void* page_request_handler(void* arg);
 
-void setup_event_queue(CMD::CMD_Args& cmd_args, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap, UAR::UAR uar);
+void setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap, UAR::UAR uar);
 
 }

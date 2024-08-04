@@ -26,7 +26,7 @@ void Event::read_eqe(MEM::Queue<EQE>& eq, l4_uint32_t* payload) {
         payload[i] = ioread32be(&eqe->data[i]);
 }
 
-void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, MEM::HCA_DMA_MEM& hca_dma_mem, dma& dma_cap) {
+void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, dma& dma_cap) {
     l4_uint32_t slot;
 
     cu32 page_count = eq.size % PAGE_EQE_COUNT ? (eq.size / PAGE_EQE_COUNT) + 1 : eq.size / PAGE_EQE_COUNT;
@@ -49,18 +49,17 @@ void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type,
     for (l4_uint32_t i = 0; i < EQI_SIZE; i++)
         payload[i] = ((l4_uint32_t*)&eqi)[i];
 
-    MEM::DMA_MEM* eq_page_mem = MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &hca_dma_mem.dma_mem[hca_dma_mem.dma_mem_count]);
-    hca_dma_mem.dma_mem_count++;
+    MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq.dma_mem);
     l4_uint64_t phys;
     l4_uint32_t pas_offset;
     for (l4_uint32_t i = 0; i < page_count; i++) {
-        phys = eq_page_mem->phys + (i * HCA_PAGE_SIZE);
+        phys = eq.dma_mem.phys + (i * HCA_PAGE_SIZE);
         pas_offset = EQI_SIZE + (i * 2);
         payload[pas_offset] = (l4_uint32_t)(phys >> 32);
         payload[++pas_offset] = (l4_uint32_t)phys;
     }
 
-    eq.start = (EQE*)eq_page_mem->virt;
+    eq.start = (EQE*)eq.dma_mem.virt;
     eq.head = 0;
     init_eq(eq);
 

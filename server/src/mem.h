@@ -20,27 +20,22 @@ struct DMA_MEM {
     L4Re::Dma_space::Dma_addr phys;
 };
 
-struct HCA_DMA_MEM {
-    DMA_MEM dma_mem[64];
-    l4_uint32_t dma_mem_count = 0;
-};
-
-struct MEM_PPM {
+struct MEM_PPD {
     dma* dma_cap;
 };
 
-struct MEM_BM {
+struct MEM_BD {
     DMA_MEM dma_mem;
 };
 
-struct MEM_PM {
+struct MEM_PD {
     void* virt;
     L4Re::Dma_space::Dma_addr phys;
 };
 
-typedef PA::Page_Pool<MEM_PPM, MEM_BM, MEM_PM> MEM_Page_Pool;
-typedef PA::Page_Block<MEM_BM, MEM_PM> MEM_Page_Block;
-typedef PA::Page<MEM_BM, MEM_PM> MEM_Page;
+typedef PA::Page_Pool<MEM_PPD, MEM_BD, MEM_PD> MEM_Page_Pool;
+typedef PA::Page_Block<MEM_BD, MEM_PD> MEM_Page_Block;
+typedef PA::Page<MEM_BD, MEM_PD> MEM_Page;
 
 void alloc_block(MEM_Page_Pool* mpp);
 
@@ -49,27 +44,27 @@ void free_block(MEM_Page_Pool* mpp, MEM_Page_Block* mpb);
 MEM_Page* find_page(MEM_Page_Pool* mpp, l4_uint64_t phys);
 
 inline MEM_Page* alloc_page(MEM_Page_Pool* mpp) {
-    return PA::alloc_page<MEM_PPM, MEM_BM, MEM_PM>(mpp);
+    return PA::alloc_page<MEM_PPD, MEM_BD, MEM_PD>(mpp);
 }
 
 inline void free_page(MEM_Page_Pool* mpp, l4_uint64_t phys) {
-    PA::free_page<MEM_PPM, MEM_BM, MEM_PM>(mpp, find_page(mpp, phys));
+    PA::free_page<MEM_PPD, MEM_BD, MEM_PD>(mpp, find_page(mpp, phys));
 }
 
 inline void remove_block_from_pool(MEM_Page_Pool* mpp, MEM_Page_Block* mpb) {
-    PA::remove_block_from_pool<MEM_PPM, MEM_BM, MEM_PM>(mpp, mpb);
+    PA::remove_block_from_pool<MEM_PPD, MEM_BD, MEM_PD>(mpp, mpb);
 }
 
 inline void add_block_to_pool(MEM_Page_Pool* mpp, MEM_Page_Block* mpb) {
-    PA::add_block_to_pool<MEM_PPM, MEM_BM, MEM_PM>(mpp, mpb);
+    PA::add_block_to_pool<MEM_PPD, MEM_BD, MEM_PD>(mpp, mpb);
 }
 
 inline MEM_Page_Block* create_block(MEM_Page_Pool* mpp) {
-    return PA::create_block<MEM_PPM, MEM_BM, MEM_PM>(mpp);
+    return PA::create_block<MEM_PPD, MEM_BD, MEM_PD>(mpp);
 }
 
 inline void destroy_block(MEM_Page_Block* mpb) {
-    PA::destroy_block<MEM_BM, MEM_PM>(mpb);
+    PA::destroy_block<MEM_BD, MEM_PD>(mpb);
 }
 
 template<typename QE>
@@ -78,6 +73,7 @@ struct Queue {
     l4_size_t size;
     l4_uint32_t head = 0;
     l4_uint32_t id = 0;
+    DMA_MEM dma_mem;
 };
 
 template<typename QE>
@@ -88,6 +84,8 @@ l4_uint32_t enqueue(Queue<QE>& q) {
     return slot;
 }
 
-DMA_MEM* alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);
+void alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);
+
+void free_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);
 
 }
