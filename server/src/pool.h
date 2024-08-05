@@ -52,86 +52,89 @@ struct Pool {
 
 /* gets an available Element from the Pool */
 template<typename PD, typename BD, typename ED>
-Element<BD, ED>* alloc_page(Pool<PD, BD, ED>* pp) {
-    std::lock_guard<std::mutex> lock(pp->lock);
+Element<BD, ED>* alloc_page(Pool<PD, BD, ED>* p) {
+    std::lock_guard<std::mutex> lock(p->lock);
 
-    if (pp->size == pp->max) return nullptr;
-    if (pp->block_count == 0) pp->alloc_block(pp);
-    Block<BD, ED>* pb = pp->start;
+    if (p->size == p->max) return nullptr;
+    if (p->block_count == 0) p->alloc_block(p);
+    Block<BD, ED>* b = p->start;
     while (true) {
-        if (pb->page_count < pp->block_size) {
-            for (l4_uint64_t i = 0; i < pp->block_size; i++) {
-                if (pb->start[i].used) continue;
-                pp->size++;
-                pb->page_count++;
-                pb->start[i].used = true;
+        if (b->page_count < p->block_size) {
+            for (l4_uint64_t i = 0; i < p->block_size; i++) {
+                if (b->start[i].used) continue;
+                p->size++;
+                b->page_count++;
+                b->start[i].used = true;
 
-                return &pb->start[i];
+                return &b->start[i];
             }
         }
-        if (pb->next == nullptr) pp->alloc_block(pp);
-        pb = pb->next;
+        if (b->next == nullptr) p->alloc_block(p);
+        b = b->next;
     }
 }
 
 /* returns an unused Element to the Pool */
 template<typename PD, typename BD, typename ED>
-void free_page(Pool<PD, BD, ED>* pp, Element<BD, ED>* p) {
-    std::lock_guard<std::mutex> lock(pp->lock);
+void free_page(Pool<PD, BD, ED>* p, Element<BD, ED>* e) {
+    std::lock_guard<std::mutex> lock(p->lock);
 
-    Block<BD, ED>* pb = p->block;
-    pp->size--;
-    pb->page_count--;
-    p->used = false;
-    if (pb->page_count == 0) pp->free_block(pp, pb);
+    Block<BD, ED>* b = e->block;
+    p->size--;
+    b->page_count--;
+    e->used = false;
+    if (b->page_count == 0) p->free_block(p, b);
 }
 
 /* removes Block from Pool Block List */
 template<typename PD, typename BD, typename ED>
-void remove_block_from_pool(Pool<PD, BD, ED>* pp, Block<BD, ED>* pb) {
-    if (pb->prev == nullptr) {
-        if(pb->next == nullptr) pp->start = nullptr;
-        else pp->start = pb->next;
+void remove_block_from_pool(Pool<PD, BD, ED>* p, Block<BD, ED>* b) {
+    if (b->prev == nullptr) {
+        if(b->next == nullptr) p->start = nullptr;
+        else p->start = b->next;
     }
-    else if (pb->next == nullptr) pb->prev->next = nullptr;
+    else if (b->next == nullptr) {
+        b->prev->next = nullptr;
+        p->end = b->prev;
+    }
     else {
-        pb->prev->next = pb->next;
-        pb->next->prev = pb->prev;
+        b->prev->next = b->next;
+        b->next->prev = b->prev;
     }
-    pp->block_count--;
+    p->block_count--;
 }
 
 /* adds Block to Pool Block List */
 template<typename PD, typename BD, typename ED>
-void add_block_to_pool(Pool<PD, BD, ED>* pp, Block<BD, ED>* pb) {
-    if (pp->start == nullptr) {
-        pp->start = pb;
-        pp->end = pb;
+void add_block_to_pool(Pool<PD, BD, ED>* p, Block<BD, ED>* b) {
+    if (p->start == nullptr) {
+        p->start = b;
+        p->end = b;
     }
     else {
-        pp->end->next = pb;
-        pb->prev = pp->end;
-        pp->end = pb;
+        p->end->next = b;
+        b->prev = p->end;
+        p->end = b;
     }
-    pp->block_count++;
+    p->block_count++;
 }
 
 /* allocates and initializes new Block */
 template<typename PD, typename BD, typename ED>
-Block<BD, ED>* create_block(Pool<PD, BD, ED>* pp) {
-    Block<BD, ED>* pb = (Block<BD, ED>*)malloc(sizeof(Block<BD, ED>));
-    pb->page_count = 0;
-    pb->next = nullptr;
-    pb->prev = nullptr;
-    pb->start = (Element<BD, ED>*)malloc(sizeof(Element<BD, ED>) * pp->block_size);
-    return pb;
+Block<BD, ED>* create_block(Pool<PD, BD, ED>* p) {
+    Block<BD, ED>* b = (Block<BD, ED>*)malloc(sizeof(Block<BD, ED>));
+    b->page_count = 0;
+    b->next = nullptr;
+    b->prev = nullptr;
+    b->start = (Element<BD, ED>*)malloc(sizeof(Element<BD, ED>) * p->block_size);
+    return b;
 }
 
 /* frees unused Block */
 template<typename BD, typename ED>
-void destroy_block(Block<BD, ED>* pb) {
-    free(pb->start);
-    free(pb);
+void destroy_block(Block<BD, ED>* b) {
+    free(b->start);
+    free(b);
 }
 
 }
