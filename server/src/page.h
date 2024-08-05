@@ -33,7 +33,7 @@ struct Page_Block {
     Page_Block* next;
     Page_Block* prev;
     BD data;
-    Page<BD, PD> *start;
+    Page<BD, PD>* start;
 };
 
 template<typename PPD, typename BD, typename PD>
@@ -47,6 +47,7 @@ struct Page_Pool {
     void (*free_block)(Page_Pool<PPD, BD, PD>*, Page_Block<BD, PD>*);
     PPD data;
     Page_Block<BD, PD>* start;
+    Page_Block<BD, PD>* end;
 };
 
 /* gets an available Page from the Pool */
@@ -59,14 +60,13 @@ Page<BD, PD>* alloc_page(Page_Pool<PPD, BD, PD>* pp) {
     Page_Block<BD, PD>* pb = pp->start;
     while (true) {
         if (pb->page_count < pp->block_size) {
-            Page<BD, PD>* p = pb->start;
             for (l4_uint64_t i = 0; i < pp->block_size; i++) {
-                if (p[i].used) continue;
+                if (pb->start[i].used) continue;
                 pp->size++;
                 pb->page_count++;
-                p[i].used = true;
+                pb->start[i].used = true;
 
-                return &p[i];
+                return &pb->start[i];
             }
         }
         if (pb->next == nullptr) pp->alloc_block(pp);
@@ -104,17 +104,14 @@ void remove_block_from_pool(Page_Pool<PPD, BD, PD>* pp, Page_Block<BD, PD>* pb) 
 /* adds Page Block to Pool Block List */
 template<typename PPD, typename BD, typename PD>
 void add_block_to_pool(Page_Pool<PPD, BD, PD>* pp, Page_Block<BD, PD>* pb) {
-    if (pp->start == nullptr) pp->start = pb;
+    if (pp->start == nullptr) {
+        pp->start = pb;
+        pp->end = pb;
+    }
     else {
-        Page_Block<BD, PD>* current = pp->start;
-        while (true) {
-            if (current->next == nullptr) {
-                current->next = pb;
-                pb->prev = current;
-                break;
-            }
-            current = current->next;
-        }
+        pp->end->next = pb;
+        pb->prev = pp->end;
+        pp->end = pb;
     }
     pp->block_count++;
 }

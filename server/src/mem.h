@@ -1,5 +1,6 @@
 #pragma once
 
+#include <unordered_map>
 #include <l4/re/env>
 #include <l4/re/dma_space>
 #include <l4/re/dataspace>
@@ -20,9 +21,7 @@ struct DMA_MEM {
     L4Re::Dma_space::Dma_addr phys;
 };
 
-struct MEM_PPD {
-    dma* dma_cap;
-};
+struct MEM_PPD;
 
 struct MEM_BD {
     DMA_MEM dma_mem;
@@ -37,18 +36,24 @@ typedef PA::Page_Pool<MEM_PPD, MEM_BD, MEM_PD> MEM_Page_Pool;
 typedef PA::Page_Block<MEM_BD, MEM_PD> MEM_Page_Block;
 typedef PA::Page<MEM_BD, MEM_PD> MEM_Page;
 
+struct MEM_PPD {
+    dma* dma_cap;
+    std::unordered_map<l4_uint64_t, MEM_Page*> index;
+};
+
 void alloc_block(MEM_Page_Pool* mpp);
 
 void free_block(MEM_Page_Pool* mpp, MEM_Page_Block* mpb);
 
-MEM_Page* find_page(MEM_Page_Pool* mpp, l4_uint64_t phys);
-
 inline MEM_Page* alloc_page(MEM_Page_Pool* mpp) {
-    return PA::alloc_page<MEM_PPD, MEM_BD, MEM_PD>(mpp);
+    MEM_Page* mp = PA::alloc_page<MEM_PPD, MEM_BD, MEM_PD>(mpp);
+    mpp->data.index[mp->data.phys] = mp;
+    return mp;
 }
 
 inline void free_page(MEM_Page_Pool* mpp, l4_uint64_t phys) {
-    PA::free_page<MEM_PPD, MEM_BD, MEM_PD>(mpp, find_page(mpp, phys));
+    auto n = mpp->data.index.extract(phys);
+    PA::free_page<MEM_PPD, MEM_BD, MEM_PD>(mpp, n.mapped());
 }
 
 inline void remove_block_from_pool(MEM_Page_Pool* mpp, MEM_Page_Block* mpb) {

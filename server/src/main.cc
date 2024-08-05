@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 	MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &ctx.cmd_args.imb_mem);
 	MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * CMD::MBB_MAX_COUNT, &ctx.cmd_args.omb_mem);
 
-	ctx.mem_page_pool.max = 10240;
+	ctx.mem_page_pool.max = 65536;
 	ctx.mem_page_pool.size = 0;
 	ctx.mem_page_pool.block_size = 1024;
 	ctx.mem_page_pool.block_count = 0;
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 
 	printf("------------\n\n");
 	init_hca(ctx, init_seg);
-	printf("pool_size: %llu | pool_block_count %llu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count);
+	printf("pool_size: %llu | pool_block_count: %llu | hash_map_size: %lu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count, ctx.mem_page_pool.data.index.size());
 
 	printf("------------\n\n");
 	//UAR::UAR uar = alloc_uar(ctx, bar0);

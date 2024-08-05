@@ -236,7 +236,7 @@ l4_uint32_t Driver::reclaim_pages(MLX5_Context& ctx, l4_int32_t page_count) {
 		result += reclaim_page_count;
 	//} while (reclaim_page_count);
 
-	printf("page_pool_size: %llu | page_block_count: %llu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count);
+	printf("page_pool_size: %llu | page_block_count: %llu | hash_map_size: %lu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count, ctx.mem_page_pool.data.index.size());
 
 	return result;
 }
