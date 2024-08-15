@@ -43,6 +43,7 @@ void MEM::free_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size
     L4Re::chksys(L4Re::Env::env()->rm()->detach(dma_mem->virt, &dc));*/
 
     dma_mem->cap.get().invalidate();
+    dma_mem->cap.release();
 }
 
 void MEM::alloc_block(MEM_Page_Pool* mpp) {

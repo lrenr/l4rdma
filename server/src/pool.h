@@ -47,7 +47,7 @@ struct Pool {
     void (*free_block)(Pool<PD, BD, ED>*, Block<BD, ED>*);
     PD data;
     Block<BD, ED>* start;
-    Block<BD, ED>* end;
+    Block<BD, ED>* end; // when start == nullptr undefined
 };
 
 /* gets an available Element from the Pool */
