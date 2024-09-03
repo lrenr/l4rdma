@@ -2,7 +2,9 @@
 
 #include <l4/re/env>
 #include "mem.h"
+#include "queue.h"
 #include "cmd.h"
+#include "uar.h"
 
 namespace Event {
 
@@ -73,16 +75,16 @@ enum EQ_STATUS {
     EQ_STATUS_EQ_WRITE_FAILURE   = 0xa,
 };
 
-void init_eq(MEM::Queue<EQE>& eq);
+void init_eq(Q::Queue_Obj* eq);
 
-bool eqe_owned_by_hw(MEM::Queue<EQE>& eq);
+bool eqe_owned_by_hw(Q::Queue_Obj* eq);
 
-void read_eqe(MEM::Queue<EQE>& eq, l4_uint32_t* payload);
+void read_eqe(Q::Queue_Obj* eq, l4_uint32_t* payload);
 
-void create_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, dma& dma_cap);
+void create_eq(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4_uint32_t irq_num, UAR::UAR_Page* uarp, dma& dma_cap);
 
-l4_uint32_t get_eq_state(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq);
+l4_uint32_t get_eq_state(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq);
 
-void destroy_eq(CMD::CMD_Args& cmd_args, MEM::Queue<EQE>& eq);
+void destroy_eq(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq);
 
 }

@@ -2,6 +2,7 @@
 
 #include <l4/re/env>
 #include "mem.h"
+#include "queue.h"
 
 namespace CMD {
 
@@ -27,7 +28,6 @@ cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT;
 cu32 OMB_MAX_DATA = 128 * MBB_MAX_COUNT;
 cu32 CMD_TIMEOUT_MS = 5000;
-cu32 testconst = 1;
 
 cu32 QUERY_HCA_CAP_OUTPUT_LENGTH        = 406;
 cu32 INIT_HCA_OUTPUT_LENGTH             = 0;
@@ -199,7 +199,7 @@ enum CQE_STATUS {
 
 /* All the things needed to execute commands */
 struct CMD_Args {
-    MEM::Queue<CMD::CQE> cq;
+    Q::Queue<CMD::CQE> cq;
     reg32* dbv;
     MEM::DMA_MEM imb_mem;
     MEM::DMA_MEM omb_mem;
@@ -226,6 +226,6 @@ void get_cmd_output(CMD::CMD_Args& cmd_args, l4_uint32_t slot, l4_uint32_t* outp
 
 void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count);
 
-void validate_cqe(MEM::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count);
+void validate_cqe(Q::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count);
 
 }

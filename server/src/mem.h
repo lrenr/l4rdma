@@ -72,23 +72,6 @@ inline void destroy_block(MEM_Page_Block* mpb) {
     PA::destroy_block<MEM_BD, MEM_ED>(mpb);
 }
 
-template<typename QE>
-struct Queue {
-    QE* start;
-    l4_size_t size;
-    l4_uint32_t head = 0;
-    l4_uint32_t id = 0;
-    DMA_MEM dma_mem;
-};
-
-template<typename QE>
-l4_uint32_t enqueue(Queue<QE>& q) {
-    l4_uint32_t slot = q.head;
-    if (++q.head >= q.size)
-        q.head = 0;
-    return slot;
-}
-
 void alloc_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);
 
 void free_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size_t size, DMA_MEM* dma_mem);

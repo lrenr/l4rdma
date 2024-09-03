@@ -55,23 +55,8 @@ int main(int argc, char **argv) {
 	ctx.mem_page_pool.data.dma_cap = &dma_cap;
 	ctx.mem_page_pool.start = nullptr;
 
-	MEM::MEM_Page* mp = MEM::alloc_page(&ctx.mem_page_pool);
-	MEM::free_page(&ctx.mem_page_pool, mp->data.phys);
-
-	ctx.uar_page_pool.max = 1024;
-	ctx.uar_page_pool.size = 0;
-	ctx.uar_page_pool.block_size = 64;
-	ctx.uar_page_pool.block_count = 0;
-	ctx.uar_page_pool.alloc_block = UAR::alloc_block;
-	ctx.uar_page_pool.free_block = UAR::free_block;
-	ctx.uar_page_pool.data.base.index = 4096;
-	ctx.uar_page_pool.data.base.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * 4096));
-	ctx.uar_page_pool.start = nullptr;
-
-	UAR::UAR_Page* up = UAR::alloc_page(&ctx.uar_page_pool);
-	UAR::free_page(&ctx.uar_page_pool, up);
-	up = UAR::alloc_page(&ctx.uar_page_pool);
-	UAR::free_page(&ctx.uar_page_pool, up);
+	//MEM::MEM_Page* mp = MEM::alloc_page(&ctx.mem_page_pool);
+	//MEM::free_page(&ctx.mem_page_pool, mp->data.phys);
 
 	using namespace Driver;
 	Init_Seg* init_seg = (Driver::Init_Seg*)bar0;
@@ -84,8 +69,10 @@ int main(int argc, char **argv) {
 	printf("pool_size: %llu | pool_block_count: %llu | hash_map_size: %lu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count, ctx.mem_page_pool.data.index.size());
 
 	printf("------------\n\n");
-	//UAR::UAR uar = alloc_uar(ctx, bar0);
-	//setup_event_queue(ctx, icu_src, msix_table, icu, dma_cap, uar);
+	alloc_uar(ctx, bar0);
+	UAR::UAR_Page* up = UAR::alloc_page(&ctx.uar_page_pool);
+	UAR::free_page(&ctx.uar_page_pool, up);
+	setup_event_queue(ctx, icu_src, msix_table, icu, dma_cap);
 
 	printf("------------\n\n");
 	teardown_hca(ctx);

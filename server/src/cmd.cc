@@ -161,7 +161,7 @@ l4_uint32_t CMD::create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t 
     iowrite32be(&cqe->output_length, output_length);
     iowrite32be(&cqe->ctrl, 1);
     
-    l4_uint32_t slot = MEM::enqueue(cmd_args.cq);
+    l4_uint32_t slot = Q::enqueue(cmd_args.cq);
     return slot;
 }
 
@@ -199,7 +199,7 @@ void CMD::ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
     iowrite32be(dbv, dbr);
 }
 
-void CMD::validate_cqe(MEM::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count) {
+void CMD::validate_cqe(Q::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count) {
     for (int i = 0; i < count; i++) {
         CQE* cqe = &cq.start[slots[i]];
         poll_ownership(cqe);

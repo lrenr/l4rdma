@@ -254,6 +254,16 @@ l4_uint32_t Driver::reclaim_all_pages(MLX5_Context& ctx) {
 	return result;
 }
 
+void Driver::init_queue_obj_pool(MLX5_Context& ctx) {
+	ctx.queue_obj_pool.max = 1024;
+	ctx.queue_obj_pool.size = 0;
+	ctx.queue_obj_pool.block_size = 64;
+	ctx.queue_obj_pool.block_count = 0;
+	ctx.queue_obj_pool.alloc_block = Q::alloc_block;
+	ctx.queue_obj_pool.free_block = Q::free_block;
+	ctx.queue_obj_pool.start = nullptr;
+}
+
 void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
 	using namespace Device;
 	using namespace CMD;
@@ -346,6 +356,8 @@ void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
 	if (set_driver) set_driver_version(ctx);
 	printf("\n");
 
+	init_queue_obj_pool(ctx);
+
 	printf("Initialization complete\n\n");
 }
 
@@ -376,7 +388,7 @@ void Driver::teardown_hca(MLX5_Context& ctx) {
 	printf("Teardown complete\n\n");
 }
 
-UAR::UAR Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
+void Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
 	UAR::UAR uar;
 	l4_uint32_t slot, output[2];
 
@@ -390,7 +402,15 @@ UAR::UAR Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
 
 	uar.addr = (UAR::Page*)(bar0 + (HCA_PAGE_SIZE * uar.index));
 
-	return uar;
+	ctx.uar_page_pool.max = 1024;
+	ctx.uar_page_pool.size = 0;
+	ctx.uar_page_pool.block_size = 64;
+	ctx.uar_page_pool.block_count = 0;
+	ctx.uar_page_pool.alloc_block = UAR::alloc_block;
+	ctx.uar_page_pool.free_block = UAR::free_block;
+	ctx.uar_page_pool.data.base.index = uar.index;
+	ctx.uar_page_pool.data.base.addr = uar.addr;
+	ctx.uar_page_pool.start = nullptr;
 }
 
 void* Driver::page_request_handler(void* arg) {
@@ -398,7 +418,7 @@ void* Driver::page_request_handler(void* arg) {
 
 	Interrupt::IRQH_Args args = *(Interrupt::IRQH_Args*)arg;
 	PRH_OPT opt = *(PRH_OPT*)args.opt;
-	MEM::Queue<EQE>* eq = opt.eq;
+	Q::Queue_Obj* eq = opt.eq;
 	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
 	fflush(stdout);
 
@@ -409,9 +429,9 @@ void* Driver::page_request_handler(void* arg) {
 		irq->receive(L4_IPC_NEVER, l4_utcb());
 		printf("interrupt!\n");
 		fflush(stdout);
-		if (eqe_owned_by_hw(*eq)) continue;
+		if (eqe_owned_by_hw(eq)) continue;
 		l4_uint32_t payload[7];
-		read_eqe(*eq, payload);
+		read_eqe(eq, payload);
 		printf("num_pages: %d\n", payload[1]);
 		fflush(stdout);
 	}
@@ -422,24 +442,25 @@ void* Driver::page_request_handler(void* arg) {
 	pthread_exit(NULL);
 }
 
-void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap, UAR::UAR uar) {
+void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap) {
 	using namespace Event;
 
 	cu32 irq_num = 0;
-	MEM::Queue<EQE> eq;
-	eq.size = 4;
+	Q::Queue_Obj* eq = Q::alloc_queue(&ctx.queue_obj_pool);
+	eq->data.size = 4;
 	PRH_OPT opt;
 	opt.ctx = &ctx;
 	opt.active = true;
-	opt.eq = &eq;
+	opt.eq = eq;
 	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, irq_num,
 		icu, page_request_handler, &opt);
 
-	create_eq(ctx.cmd_args, eq, EVENT_TYPE_PAGE_REQUEST, irq_num, uar.index, dma_cap);
+	UAR::UAR_Page* uarp = UAR::alloc_page(&ctx.uar_page_pool);
+	create_eq(ctx.cmd_args, eq, EVENT_TYPE_PAGE_REQUEST, irq_num, uarp, dma_cap);
 	l4_uint32_t state = get_eq_state(ctx.cmd_args, eq);
 	printf("eq_state: 0x%x\n", state);
 
-	iowrite32be(&uar.addr->eqn_arm_and_update_ci, eq.id << UAR::UAR_EQN_OFFSET & UAR::UAR_EQN_MASK);
+	iowrite32be(&uarp->data.uar.addr->eqn_arm_and_update_ci, eq->data.id << UAR::UAR_EQN_OFFSET & UAR::UAR_EQN_MASK);
 
 	state = get_eq_state(ctx.cmd_args, eq);
 	printf("eq_state: 0x%x\n", state);

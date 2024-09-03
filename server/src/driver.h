@@ -2,6 +2,7 @@
 
 #include <l4/re/env>
 #include "mem.h"
+#include "queue.h"
 #include "cmd.h"
 #include "event.h"
 #include "uar.h"
@@ -31,11 +32,13 @@ struct MLX5_Context {
     HCA_CAP hca_cap;
     UAR::UAR_Page_Pool uar_page_pool;
     MEM::MEM_Page_Pool mem_page_pool;
+    Q::Queue_Obj_Pool queue_obj_pool;
 };
 
+/* Page Request Handler Options */
 struct PRH_OPT {
     MLX5_Context* ctx;
-    MEM::Queue<Event::EQE>* eq;
+    Q::Queue_Obj* eq;
     bool active;
 };
 
@@ -63,14 +66,16 @@ l4_uint32_t reclaim_pages(MLX5_Context& ctx, l4_int32_t page_count);
 
 l4_uint32_t reclaim_all_pages(MLX5_Context& ctx);
 
+void init_queue_obj_pool(MLX5_Context& ctx);
+
 void init_hca(MLX5_Context& ctx, Init_Seg* init_seg);
 
 void teardown_hca(MLX5_Context& ctx);
 
-UAR::UAR alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0);
+void alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0);
 
 void* page_request_handler(void* arg);
 
-void setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap, UAR::UAR uar);
+void setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap);
 
 }

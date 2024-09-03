@@ -13,6 +13,7 @@ SRC_CC          = 	main.cc \
 					driver.cc \
 					event.cc \
 					interrupt.cc \
-					uar.cc
+					uar.cc \
+					queue.cc
 
 include $(L4DIR)/mk/prog.mk

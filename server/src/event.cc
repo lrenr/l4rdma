@@ -7,35 +7,35 @@
 using namespace Device;
 using namespace CMD;
 
-void Event::init_eq(MEM::Queue<EQE>& eq) {
+void Event::init_eq(Q::Queue_Obj* eq) {
     /* set ownership bit to 1 */
-    for (l4_size_t i = 0; i < eq.size - 1; i++) {
-        iowrite32be(&eq.start[i].ctrl, 0x1);
+    for (l4_size_t i = 0; i < eq->data.size - 1; i++) {
+        iowrite32be(&((EQE*)eq->data.start)[i].ctrl, 0x1);
     }
 }
 
-bool Event::eqe_owned_by_hw(MEM::Queue<EQE>& eq) {
-    l4_uint32_t ownership = ioread32be(&eq.start[eq.head].ctrl);
+bool Event::eqe_owned_by_hw(Q::Queue_Obj* eq) {
+    l4_uint32_t ownership = ioread32be(&((EQE*)eq->data.start)[eq->data.head].ctrl);
     ownership &= EQC_OWNERSHIP_MASK;
     return ownership;
 }
 
-void Event::read_eqe(MEM::Queue<EQE>& eq, l4_uint32_t* payload) {
-    EQE* eqe = &eq.start[MEM::enqueue(eq)];
+void Event::read_eqe(Q::Queue_Obj* eq, l4_uint32_t* payload) {
+    EQE* eqe = &((EQE*)eq->data.start)[Q::enqueue(eq->data)];
     for (int i = 0; i < 7; i++)
         payload[i] = ioread32be(&eqe->data[i]);
 }
 
-void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type, l4_uint32_t irq_num, l4_uint32_t uar, dma& dma_cap) {
+void Event::create_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4_uint32_t irq_num, UAR::UAR_Page* uarp, dma& dma_cap) {
     l4_uint32_t slot;
 
-    cu32 page_count = eq.size % PAGE_EQE_COUNT ? (eq.size / PAGE_EQE_COUNT) + 1 : eq.size / PAGE_EQE_COUNT;
+    cu32 page_count = eq->data.size % PAGE_EQE_COUNT ? (eq->data.size / PAGE_EQE_COUNT) + 1 : eq->data.size / PAGE_EQE_COUNT;
     if (page_count > (128 - EQI_SIZE) / 2) throw std::runtime_error("Event Queue too large!");
 
     EQI eqi = {};
-    l4_uint32_t log_size = (l4_uint32_t)log2(eq.size);
+    l4_uint32_t log_size = (l4_uint32_t)log2(eq->data.size);
     eqi.eqc.log_eq_size_and_uar = log_size << EQC_LOG_EQ_SIZE_OFFSET & EQC_LOG_EQ_SIZE_MASK;
-    eqi.eqc.log_eq_size_and_uar |= uar << EQC_UAR_OFFSET & EQC_UAR_MASK;
+    eqi.eqc.log_eq_size_and_uar |= uarp->data.uar.index << EQC_UAR_OFFSET & EQC_UAR_MASK;
     eqi.eqc.intr = irq_num << EQC_INTR_OFFSET & EQC_INTR_MASK;
     std::bitset<64> eq_type{0};
     eq_type[type] = true;
@@ -49,18 +49,18 @@ void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type,
     for (l4_uint32_t i = 0; i < EQI_SIZE; i++)
         payload[i] = ((l4_uint32_t*)&eqi)[i];
 
-    MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq.dma_mem);
+    MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq->data.dma_mem);
     l4_uint64_t phys;
     l4_uint32_t pas_offset;
     for (l4_uint32_t i = 0; i < page_count; i++) {
-        phys = eq.dma_mem.phys + (i * HCA_PAGE_SIZE);
+        phys = eq->data.dma_mem.phys + (i * HCA_PAGE_SIZE);
         pas_offset = EQI_SIZE + (i * 2);
         payload[pas_offset] = (l4_uint32_t)(phys >> 32);
         payload[++pas_offset] = (l4_uint32_t)phys;
     }
 
-    eq.start = (EQE*)eq.dma_mem.virt;
-    eq.head = 0;
+    eq->data.start = (EQE*)eq->data.dma_mem.virt;
+    eq->data.head = 0;
     init_eq(eq);
 
     /* CREATE_EQ */
@@ -73,14 +73,14 @@ void Event::create_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq, l4_uint32_t type,
 
     l4_uint32_t eq_number = output[0];
     printf("eq_number: %d\n", eq_number);
-    eq.id = eq_number;
+    eq->data.id = eq_number;
 }
 
-l4_uint32_t Event::get_eq_state(CMD_Args& cmd_args, MEM::Queue<EQE>& eq) {
+l4_uint32_t Event::get_eq_state(CMD_Args& cmd_args, Q::Queue_Obj* eq) {
     l4_uint32_t slot;
 
-    cu32 page_count = eq.size % PAGE_EQE_COUNT ? (eq.size / PAGE_EQE_COUNT) + 1 : eq.size / PAGE_EQE_COUNT;
-    l4_uint32_t payload[2] = {eq.id, 0};
+    cu32 page_count = eq->data.size % PAGE_EQE_COUNT ? (eq->data.size / PAGE_EQE_COUNT) + 1 : eq->data.size / PAGE_EQE_COUNT;
+    l4_uint32_t payload[2] = {eq->data.id, 0};
     l4_uint32_t output_length = EQI_SIZE + (page_count * 2);
 
     /* QUERY_EQ */
@@ -98,9 +98,9 @@ l4_uint32_t Event::get_eq_state(CMD_Args& cmd_args, MEM::Queue<EQE>& eq) {
     return (eqi->eqc.status & EQC_STATE_MASK) >> EQC_STATE_OFFSET;
 }
 
-void Event::destroy_eq(CMD_Args& cmd_args, MEM::Queue<EQE>& eq) {
+void Event::destroy_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq) {
     l4_uint32_t slot;
-    l4_uint32_t payload[2] = {eq.id, 0};
+    l4_uint32_t payload[2] = {eq->data.id, 0};
 
     /* DESTROY_EQ */
     slot = create_cqe(cmd_args, DESTROY_EQ, 0x0, payload, 2, DESTROY_EQ_OUTPUT_LENGTH);
