@@ -4,7 +4,6 @@
 #include "mem.h"
 #include "queue.h"
 #include "cmd.h"
-#include "event.h"
 #include "uar.h"
 
 namespace Driver {

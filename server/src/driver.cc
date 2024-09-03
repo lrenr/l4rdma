@@ -8,6 +8,7 @@
 #include "device.h"
 #include "mem.h"
 #include "interrupt.h"
+#include "event.h"
 
 using namespace CMD;
 using namespace Device;
