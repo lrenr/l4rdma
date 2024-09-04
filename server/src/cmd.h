@@ -199,7 +199,7 @@ enum CQE_STATUS {
 
 /* All the things needed to execute commands */
 struct CMD_Args {
-    Q::Queue<CMD::CQE> cq;
+    Q::Queue cq;
     reg32* dbv;
     MEM::DMA_MEM imb_mem;
     MEM::DMA_MEM omb_mem;
@@ -226,6 +226,6 @@ void get_cmd_output(CMD::CMD_Args& cmd_args, l4_uint32_t slot, l4_uint32_t* outp
 
 void ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count);
 
-void validate_cqe(Q::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count);
+void validate_cqe(Q::Queue& cq, l4_uint32_t* slots, int count);
 
 }

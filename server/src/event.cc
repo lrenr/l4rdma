@@ -14,20 +14,28 @@ void Event::init_eq(Q::Queue_Obj* eq) {
     }
 }
 
-bool Event::eqe_owned_by_hw(Q::Queue_Obj* eq) {
+bool Event::eqe_owned_by_hw(Driver::MLX5_Context& ctx, l4_uint32_t eq_number) {
+    Q::Queue_Obj* eq = ctx.event_queue_pool.data.index[eq_number];
+
     l4_uint32_t ownership = ioread32be(&((EQE*)eq->data.start)[eq->data.head].ctrl);
     ownership &= EQC_OWNERSHIP_MASK;
     return ownership;
 }
 
-void Event::read_eqe(Q::Queue_Obj* eq, l4_uint32_t* payload) {
+void Event::read_eqe(Driver::MLX5_Context& ctx, l4_uint32_t eq_number, l4_uint32_t* payload) {
+    Q::Queue_Obj* eq = ctx.event_queue_pool.data.index[eq_number];
+
     EQE* eqe = &((EQE*)eq->data.start)[Q::enqueue(eq->data)];
     for (int i = 0; i < 7; i++)
         payload[i] = ioread32be(&eqe->data[i]);
 }
 
-void Event::create_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4_uint32_t irq_num, UAR::UAR_Page* uarp, dma& dma_cap) {
+l4_uint32_t Event::create_eq(Driver::MLX5_Context& ctx, l4_size_t size, l4_uint32_t type, l4_uint32_t irq_num) {
     l4_uint32_t slot;
+    Q::Queue_Obj* eq = Q::alloc_queue(&ctx.event_queue_pool, size);
+    EQ_CTX* eq_ctx = (EQ_CTX*)eq->data.q_ctx;
+    eq_ctx->irq_num = irq_num;
+    eq_ctx->type = type;
 
     cu32 page_count = eq->data.size % PAGE_EQE_COUNT ? (eq->data.size / PAGE_EQE_COUNT) + 1 : eq->data.size / PAGE_EQE_COUNT;
     if (page_count > (128 - EQI_SIZE) / 2) throw std::runtime_error("Event Queue too large!");
@@ -35,10 +43,10 @@ void Event::create_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4
     EQI eqi = {};
     l4_uint32_t log_size = (l4_uint32_t)log2(eq->data.size);
     eqi.eqc.log_eq_size_and_uar = log_size << EQC_LOG_EQ_SIZE_OFFSET & EQC_LOG_EQ_SIZE_MASK;
-    eqi.eqc.log_eq_size_and_uar |= uarp->data.uar.index << EQC_UAR_OFFSET & EQC_UAR_MASK;
-    eqi.eqc.intr = irq_num << EQC_INTR_OFFSET & EQC_INTR_MASK;
+    eqi.eqc.log_eq_size_and_uar |= eq->data.uarp->data.uar.index << EQC_UAR_OFFSET & EQC_UAR_MASK;
+    eqi.eqc.intr = eq_ctx->irq_num << EQC_INTR_OFFSET & EQC_INTR_MASK;
     std::bitset<64> eq_type{0};
-    eq_type[type] = true;
+    eq_type[eq_ctx->type] = true;
     eqi.type[0] = (l4_uint32_t)(eq_type.to_ullong() >> 32);
     eqi.type[1] = (l4_uint32_t)eq_type.to_ullong();
     
@@ -49,7 +57,7 @@ void Event::create_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4
     for (l4_uint32_t i = 0; i < EQI_SIZE; i++)
         payload[i] = ((l4_uint32_t*)&eqi)[i];
 
-    MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq->data.dma_mem);
+    /*MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq->data.dma_mem);
     l4_uint64_t phys;
     l4_uint32_t pas_offset;
     for (l4_uint32_t i = 0; i < page_count; i++) {
@@ -60,36 +68,43 @@ void Event::create_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4
     }
 
     eq->data.start = (EQE*)eq->data.dma_mem.virt;
-    eq->data.head = 0;
+    eq->data.head = 0;*/
+    for (l4_uint32_t i = 0; i < page_count; i++) {
+        payload[EQI_SIZE + i] = eq->data.pas_list[i];
+    }
     init_eq(eq);
 
     /* CREATE_EQ */
-    slot = create_cqe(cmd_args, CREATE_EQ, 0x0, payload, payload_length, CREATE_EQ_OUTPUT_LENGTH);
-    ring_doorbell(cmd_args.dbv, &slot, 1);
-    validate_cqe(cmd_args.cq, &slot, 1);
+    slot = create_cqe(ctx, CREATE_EQ, 0x0, payload, payload_length, CREATE_EQ_OUTPUT_LENGTH);
+    ring_doorbell(ctx.dbv, &slot, 1);
+    validate_cqe(ctx.cq, &slot, 1);
 
     l4_uint32_t output[CREATE_EQ_OUTPUT_LENGTH];
-    get_cmd_output(cmd_args, slot, output, CREATE_EQ_OUTPUT_LENGTH);
+    get_cmd_output(ctx, slot, output, CREATE_EQ_OUTPUT_LENGTH);
 
     l4_uint32_t eq_number = output[0];
     printf("eq_number: %d\n", eq_number);
     eq->data.id = eq_number;
+
+    Q::index_queue(&ctx.event_queue_pool, eq);
+    return eq_number;
 }
 
-l4_uint32_t Event::get_eq_state(CMD_Args& cmd_args, Q::Queue_Obj* eq) {
+l4_uint32_t Event::get_eq_state(Driver::MLX5_Context& ctx, l4_uint32_t eq_number) {
     l4_uint32_t slot;
+    Q::Queue_Obj* eq = ctx.event_queue_pool.data.index[eq_number];
 
     cu32 page_count = eq->data.size % PAGE_EQE_COUNT ? (eq->data.size / PAGE_EQE_COUNT) + 1 : eq->data.size / PAGE_EQE_COUNT;
     l4_uint32_t payload[2] = {eq->data.id, 0};
     l4_uint32_t output_length = EQI_SIZE + (page_count * 2);
 
     /* QUERY_EQ */
-    slot = create_cqe(cmd_args, QUERY_EQ, 0x0, payload, 2, output_length);
-    ring_doorbell(cmd_args.dbv, &slot, 1);
-    validate_cqe(cmd_args.cq, &slot, 1);
+    slot = create_cqe(ctx, QUERY_EQ, 0x0, payload, 2, output_length);
+    ring_doorbell(ctx.dbv, &slot, 1);
+    validate_cqe(ctx.cq, &slot, 1);
 
     l4_uint32_t output[128];
-    get_cmd_output(cmd_args, slot, output, output_length);
+    get_cmd_output(ctx, slot, output, output_length);
 
     EQI* eqi = (EQI*)output;
     if ((eqi->eqc.status & EQC_STATUS_MASK) >> EQC_STATUS_OFFSET)
@@ -98,12 +113,13 @@ l4_uint32_t Event::get_eq_state(CMD_Args& cmd_args, Q::Queue_Obj* eq) {
     return (eqi->eqc.status & EQC_STATE_MASK) >> EQC_STATE_OFFSET;
 }
 
-void Event::destroy_eq(CMD_Args& cmd_args, Q::Queue_Obj* eq) {
+void Event::destroy_eq(Driver::MLX5_Context& ctx, l4_uint32_t eq_number) {
     l4_uint32_t slot;
+    Q::Queue_Obj* eq = ctx.event_queue_pool.data.index[eq_number];
     l4_uint32_t payload[2] = {eq->data.id, 0};
 
     /* DESTROY_EQ */
-    slot = create_cqe(cmd_args, DESTROY_EQ, 0x0, payload, 2, DESTROY_EQ_OUTPUT_LENGTH);
-    ring_doorbell(cmd_args.dbv, &slot, 1);
-    validate_cqe(cmd_args.cq, &slot, 1);
+    slot = create_cqe(ctx, DESTROY_EQ, 0x0, payload, 2, DESTROY_EQ_OUTPUT_LENGTH);
+    ring_doorbell(ctx.dbv, &slot, 1);
+    validate_cqe(ctx.cq, &slot, 1);
 }

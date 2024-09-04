@@ -14,7 +14,7 @@ using namespace CMD;
 using namespace Device;
 
 void Driver::debug_cmd(MLX5_Context& ctx, l4_uint32_t slot) {
-	reg32* entry = (reg32*)&ctx.cmd_args.cq.start[slot];
+	reg32* entry = (reg32*)&((CQE*)ctx.cq.start)[slot];
 	for (int i = 0; i < 16; i++) printf("%.8x\n", ioread32be(&entry[i]));
 }
 
@@ -34,7 +34,7 @@ void Driver::init_wait(reg32* initializing) {
 
 l4_uint32_t Driver::get_issi_support(MLX5_Context& ctx, l4_uint32_t slot) {
 	l4_uint32_t issi_out[QUERY_ISSI_OUTPUT_LENGTH];
-	get_cmd_output(ctx.cmd_args, slot, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
+	get_cmd_output(ctx, slot, issi_out, QUERY_ISSI_OUTPUT_LENGTH);
 
 	l4_uint32_t start = 6, end = QUERY_ISSI_OUTPUT_LENGTH - 1, pos = 0, count = 0;
 	for (l4_uint32_t i = end; i >= start; i--) {
@@ -48,7 +48,7 @@ l4_uint32_t Driver::get_issi_support(MLX5_Context& ctx, l4_uint32_t slot) {
 
 l4_int32_t Driver::get_number_of_pages(MLX5_Context& ctx, l4_uint32_t slot) {
 	l4_uint32_t pages_out[QUERY_ISSI_OUTPUT_LENGTH];
-	get_cmd_output(ctx.cmd_args, slot, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
+	get_cmd_output(ctx, slot, pages_out, QUERY_PAGES_OUTPUT_LENGTH);
 
 	return pages_out[1];
 }
@@ -64,18 +64,18 @@ void Driver::set_driver_version(MLX5_Context& ctx) {
 	printf("\n");
 
 	/* SET_DRIVER_VERSION */
-	slot = create_cqe(ctx.cmd_args, SET_DRIVER_VERSION, 0x0, driver, 18, SET_DRIVER_VERSION_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, SET_DRIVER_VERSION, 0x0, driver, 18, SET_DRIVER_VERSION_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 }
 
 l4_uint32_t Driver::configure_issi(MLX5_Context& ctx) {
 	l4_uint32_t slot;
 
 	/* QUERY_ISSI */
-	slot = create_cqe(ctx.cmd_args, QUERY_ISSI, 0x0, nullptr, 0, QUERY_ISSI_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, QUERY_ISSI, 0x0, nullptr, 0, QUERY_ISSI_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	/* Setting ISSI to Version 1 if supported or else 0 */
 	l4_uint32_t issi = get_issi_support(ctx, slot);
@@ -84,9 +84,9 @@ l4_uint32_t Driver::configure_issi(MLX5_Context& ctx) {
 	else throw std::runtime_error("ISSI version 1 not supported by Hardware");
 
 	/* SET_ISSI */
-	slot = create_cqe(ctx.cmd_args, SET_ISSI, 0x0, &issi, 1, SET_ISSI_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, SET_ISSI, 0x0, &issi, 1, SET_ISSI_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	return issi;
 }
@@ -96,12 +96,12 @@ bool Driver::configure_hca_cap(MLX5_Context& ctx) {
 
 	/* QUERY_HCA_CAP */
 	l4_uint32_t payload = 0;
-	slot = create_cqe(ctx.cmd_args, QUERY_HCA_CAP, 0x0, &payload, 1, QUERY_HCA_CAP_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, QUERY_HCA_CAP, 0x0, &payload, 1, QUERY_HCA_CAP_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	l4_uint32_t hca_cap[QUERY_HCA_CAP_OUTPUT_LENGTH];
-	get_cmd_output(ctx.cmd_args, slot, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH);
+	get_cmd_output(ctx, slot, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH);
 
 	/* 0x1 = 128 byte Cache line size supported */
 	l4_uint32_t cache_line_128byte = (hca_cap[(0x2c / 4) + 2] >> 27) & 0x1;
@@ -124,9 +124,9 @@ bool Driver::configure_hca_cap(MLX5_Context& ctx) {
 	printf("cache_line_128: %d | cmdif_support: %x | max_num_sq: %d | set_driver: %d\n", cache_line_128byte, cmdif_checksum, max_sq, driver_version);
 
 	/* SET_HCA_CAP */
-	slot = create_cqe(ctx.cmd_args, SET_HCA_CAP, 0x0, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH, SET_HCA_CAP_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, SET_HCA_CAP, 0x0, hca_cap, QUERY_HCA_CAP_OUTPUT_LENGTH, SET_HCA_CAP_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	return driver_version;
 }
@@ -164,9 +164,9 @@ void Driver::provide_pages(MLX5_Context& ctx, l4_uint32_t page_count) {
 		}
 
 		/* MANAGE_PAGES */
-		slot = create_cqe(ctx.cmd_args, MANAGE_PAGES, 0x1, page_payload, payload_length, 2);
-		ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-		validate_cqe(ctx.cmd_args.cq, &slot, 1);
+		slot = create_cqe(ctx, MANAGE_PAGES, 0x1, page_payload, payload_length, 2);
+		ring_doorbell(ctx.dbv, &slot, 1);
+		validate_cqe(ctx.cq, &slot, 1);
 	}
 }
 
@@ -174,9 +174,9 @@ l4_int32_t Driver::provide_boot_pages(MLX5_Context& ctx) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Boot */
-	slot = create_cqe(ctx.cmd_args, QUERY_PAGES, 0x1, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, QUERY_PAGES, 0x1, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	/* Provide Boot Pages */
 	l4_int32_t boot_page_count = get_number_of_pages(ctx, slot);
@@ -191,9 +191,9 @@ l4_int32_t Driver::provide_init_pages(MLX5_Context& ctx) {
 	l4_uint32_t slot;
 
 	/* QUERY_PAGES Init */
-	slot = create_cqe(ctx.cmd_args, QUERY_PAGES, 0x2, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, QUERY_PAGES, 0x2, nullptr, 0, QUERY_PAGES_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 
 	/* Provide Init Pages */
 	l4_int32_t init_page_count = get_number_of_pages(ctx, slot);
@@ -219,14 +219,14 @@ l4_uint32_t Driver::reclaim_pages(MLX5_Context& ctx, l4_int32_t page_count) {
 	l4_uint64_t phys;
 	//do {
 		/* MANAGE_PAGES Reclaim */
-		slot = create_cqe(ctx.cmd_args, MANAGE_PAGES, 0x2, payload, 2, output_length);
-		ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-		validate_cqe(ctx.cmd_args.cq, &slot, 1);
+		slot = create_cqe(ctx, MANAGE_PAGES, 0x2, payload, 2, output_length);
+		ring_doorbell(ctx.dbv, &slot, 1);
+		validate_cqe(ctx.cq, &slot, 1);
 
-		cqe = &ctx.cmd_args.cq.start[slot];
+		cqe = &((CQE*)ctx.cq.start)[slot];
 		reclaim_page_count = (l4_int32_t)ioread32be(&cqe->cod.output[0]);
 
-		get_cmd_output(ctx.cmd_args, slot, output, output_length);
+		get_cmd_output(ctx, slot, output, output_length);
 		for (l4_int32_t i = 0; i < reclaim_page_count; i++) {
 			phys = (l4_uint64_t)output[2 + (i * 2)] << 32;
 			phys |= (l4_uint64_t)output[2 + (i * 2) + 1];
@@ -256,32 +256,34 @@ l4_uint32_t Driver::reclaim_all_pages(MLX5_Context& ctx) {
 }
 
 void Driver::init_queue_obj_pool(MLX5_Context& ctx) {
-	ctx.queue_obj_pool.max = 1024;
-	ctx.queue_obj_pool.size = 0;
-	ctx.queue_obj_pool.block_size = 64;
-	ctx.queue_obj_pool.block_count = 0;
-	ctx.queue_obj_pool.alloc_block = Q::alloc_block;
-	ctx.queue_obj_pool.free_block = Q::free_block;
-	ctx.queue_obj_pool.start = nullptr;
+	ctx.event_queue_pool.max = 1024;
+	ctx.event_queue_pool.size = 0;
+	ctx.event_queue_pool.block_size = 64;
+	ctx.event_queue_pool.block_count = 0;
+	ctx.event_queue_pool.alloc_block = Q::alloc_block<Event::EQ_CTX>;
+	ctx.event_queue_pool.free_block = Q::free_block;
+	ctx.event_queue_pool.data.page_entry_count = Event::PAGE_EQE_COUNT;
+	ctx.event_queue_pool.data.uar_page_pool = &ctx.uar_page_pool;
+	ctx.event_queue_pool.start = nullptr;
 }
 
-void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
+void Driver::init_hca(MLX5_Context& ctx) {
 	using namespace Device;
 	using namespace CMD;
 
 	printf("Initializing ...\n\n");
 
 	/* read Firmware version */
-	l4_uint32_t fw_rev = ioread32be(&init_seg->fw_rev);
-	l4_uint32_t cmd_rev = ioread32be(&init_seg->cmdif_rev_fw_sub);
+	l4_uint32_t fw_rev = ioread32be(&ctx.init_seg->fw_rev);
+	l4_uint32_t cmd_rev = ioread32be(&ctx.init_seg->cmdif_rev_fw_sub);
 	l4_uint16_t fw_rev_major = fw_rev;
 	l4_uint16_t fw_rev_minor = fw_rev >> 16;
 	printf("Firmware Version: %.4x:%.4x %.4x:%.4x\n", fw_rev_major, fw_rev_minor,
 		(l4_uint16_t)cmd_rev, (l4_uint16_t)(cmd_rev >> 16));
 
-	init_wait(&init_seg->initializing);
+	init_wait(&ctx.init_seg->initializing);
 
-	l4_uint32_t info = ioread32be(&init_seg->cmdq_addr_lsb_info) & 0xff;
+	l4_uint32_t info = ioread32be(&ctx.init_seg->cmdq_addr_lsb_info) & 0xff;
 	l4_uint8_t log_size = info >> 4 &0xf;
 	l4_uint8_t log_stride = info & 0xf;
 	if (1 << log_size > 32) {
@@ -294,30 +296,30 @@ void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
 	}
 
 	/* write Command Queue Address to Device */
-	l4_uint64_t addr = ctx.cmd_args.cq.dma_mem.phys;
+	l4_uint64_t addr = ctx.cq.dma_mem.phys;
 	l4_uint32_t addr_lsb = addr & (~0x3ff);
 	l4_uint32_t addr_msb = (l4_uint64_t)addr >> 32;
 	addr_lsb = addr;
 	addr_msb = (l4_uint64_t)addr >> 32;
-	iowrite32be(&init_seg->cmdq_addr_msb, addr_msb);
-	iowrite32be(&init_seg->cmdq_addr_lsb_info, addr_lsb);
-	l4_uint32_t probe_addr_msb = ioread32be(&init_seg->cmdq_addr_msb);
-	l4_uint32_t probe_addr_lsb = ioread32be(&init_seg->cmdq_addr_lsb_info);
+	iowrite32be(&ctx.init_seg->cmdq_addr_msb, addr_msb);
+	iowrite32be(&ctx.init_seg->cmdq_addr_lsb_info, addr_lsb);
+	l4_uint32_t probe_addr_msb = ioread32be(&ctx.init_seg->cmdq_addr_msb);
+	l4_uint32_t probe_addr_lsb = ioread32be(&ctx.init_seg->cmdq_addr_lsb_info);
 	printf("og: %.16llx\n", addr);
 	printf("ref: %.8x:%.8x\n", addr_msb, addr_lsb);
 	printf("addr_msb:addr_lsb: %.8x:%.8x\n", probe_addr_msb, probe_addr_lsb);
 
 	/* wait for initialization */
-	init_wait(&init_seg->initializing);
+	init_wait(&ctx.init_seg->initializing);
 
 	printf("\nInit_Seg\n");
-	printf("%.8x\n", ioread32be(&init_seg->fw_rev));
-	printf("%.8x\n", ioread32be(&init_seg->cmdif_rev_fw_sub));
+	printf("%.8x\n", ioread32be(&ctx.init_seg->fw_rev));
+	printf("%.8x\n", ioread32be(&ctx.init_seg->cmdif_rev_fw_sub));
 	printf("...\n");
-	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_msb));
-	printf("%.8x\n", ioread32be(&init_seg->cmdq_addr_lsb_info));
+	printf("%.8x\n", ioread32be(&ctx.init_seg->cmdq_addr_msb));
+	printf("%.8x\n", ioread32be(&ctx.init_seg->cmdq_addr_lsb_info));
 	printf("...\n");
-	printf("%.8x\n", ioread32be(&init_seg->initializing));
+	printf("%.8x\n", ioread32be(&ctx.init_seg->initializing));
 	printf("\n");
 
 	//TODO hardware health check
@@ -326,9 +328,9 @@ void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
 	l4_uint32_t slot;
 
 	/* ENABLE_HCA */
-	slot = create_cqe(ctx.cmd_args, ENABLE_HCA, 0x0, nullptr, 0, ENABLE_HCA_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, ENABLE_HCA, 0x0, nullptr, 0, ENABLE_HCA_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 	printf("ENABLE_HCA successful\n\n");
 
 	printf("configuring ISSI ...\n");
@@ -348,14 +350,16 @@ void Driver::init_hca(MLX5_Context& ctx, Init_Seg* init_seg) {
 	printf("Init Pages: %d\n\n", init_page_count);
 
 	/* INIT_HCA */
-	slot = create_cqe(ctx.cmd_args, INIT_HCA, 0x0, nullptr, 0, INIT_HCA_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, INIT_HCA, 0x0, nullptr, 0, INIT_HCA_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 	printf("INIT_HCA successful\n\n");
 
 	printf("setting driver version ...\n");
 	if (set_driver) set_driver_version(ctx);
 	printf("\n");
+
+	alloc_uar(ctx, (l4_uint8_t*)ctx.init_seg);
 
 	init_queue_obj_pool(ctx);
 
@@ -369,10 +373,12 @@ void Driver::teardown_hca(MLX5_Context& ctx) {
 
 	printf("Tearing Down ...\n\n");
 
+	//TODO dealloc UAR
+
 	/* TEARDOWN_HCA */
-	slot = create_cqe(ctx.cmd_args, TEARDOWN_HCA, 0x0, nullptr, 0, TEARDOWN_HCA_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, TEARDOWN_HCA, 0x0, nullptr, 0, TEARDOWN_HCA_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 	printf("TEARDOWN_HCA successful\n\n");
 
 	printf("reclaiming pages ...\n");
@@ -380,9 +386,9 @@ void Driver::teardown_hca(MLX5_Context& ctx) {
 	printf("Reclaimed Pages: %d\n\n", reclaimed_pages);
 
 	/* DISABLE_HCA */
-	slot = create_cqe(ctx.cmd_args, DISABLE_HCA, 0x0, nullptr, 0, DISABLE_HCA_OUTPUT_LENGTH);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
+	slot = create_cqe(ctx, DISABLE_HCA, 0x0, nullptr, 0, DISABLE_HCA_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
 	//debug_cmd(cq, slot);
 	printf("DISABLE_HCA successful\n\n");
 
@@ -394,10 +400,10 @@ void Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
 	l4_uint32_t slot, output[2];
 
 	/* ALLOC_UAR */
-	slot = create_cqe(ctx.cmd_args, ALLOC_UAR, 0x0, nullptr, 0, 2);
-	ring_doorbell(ctx.cmd_args.dbv, &slot, 1);
-	validate_cqe(ctx.cmd_args.cq, &slot, 1);
-	get_cmd_output(ctx.cmd_args, slot, output, 2);
+	slot = create_cqe(ctx, ALLOC_UAR, 0x0, nullptr, 0, 2);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
+	get_cmd_output(ctx, slot, output, 2);
 	uar.index = output[0];
 	printf("UAR: 0x%x %d\n", uar.index, uar.index);
 
@@ -419,7 +425,7 @@ void* Driver::page_request_handler(void* arg) {
 
 	Interrupt::IRQH_Args args = *(Interrupt::IRQH_Args*)arg;
 	PRH_OPT opt = *(PRH_OPT*)args.opt;
-	Q::Queue_Obj* eq = opt.eq;
+	l4_uint32_t eq = opt.eq;
 	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
 	fflush(stdout);
 
@@ -430,9 +436,9 @@ void* Driver::page_request_handler(void* arg) {
 		irq->receive(L4_IPC_NEVER, l4_utcb());
 		printf("interrupt!\n");
 		fflush(stdout);
-		if (eqe_owned_by_hw(eq)) continue;
+		if (eqe_owned_by_hw(*opt.ctx, eq)) continue;
 		l4_uint32_t payload[7];
-		read_eqe(eq, payload);
+		read_eqe(*opt.ctx, eq, payload);
 		printf("num_pages: %d\n", payload[1]);
 		fflush(stdout);
 	}
@@ -443,27 +449,26 @@ void* Driver::page_request_handler(void* arg) {
 	pthread_exit(NULL);
 }
 
-void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, dma& dma_cap) {
+void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu) {
 	using namespace Event;
 
 	cu32 irq_num = 0;
-	Q::Queue_Obj* eq = Q::alloc_queue(&ctx.queue_obj_pool);
-	eq->data.size = 4;
+
+	l4_uint32_t eq_number = create_eq(ctx, 4, EVENT_TYPE_PAGE_REQUEST, irq_num);
+
+	l4_uint32_t state = get_eq_state(ctx, eq_number);
+	printf("eq_state: 0x%x\n", state);
+
 	PRH_OPT opt;
 	opt.ctx = &ctx;
 	opt.active = true;
-	opt.eq = eq;
+	opt.eq = eq_number;
 	pthread_t handler_thread = Interrupt::create_msix_thread(icu_src, msix_table, irq_num,
 		icu, page_request_handler, &opt);
 
-	UAR::UAR_Page* uarp = UAR::alloc_page(&ctx.uar_page_pool);
-	create_eq(ctx.cmd_args, eq, EVENT_TYPE_PAGE_REQUEST, irq_num, uarp, dma_cap);
-	l4_uint32_t state = get_eq_state(ctx.cmd_args, eq);
-	printf("eq_state: 0x%x\n", state);
+	arm_eq(ctx, eq_number);
 
-	iowrite32be(&uarp->data.uar.addr->eqn_arm_and_update_ci, eq->data.id << UAR::UAR_EQN_OFFSET & UAR::UAR_EQN_MASK);
-
-	state = get_eq_state(ctx.cmd_args, eq);
+	state = get_eq_state(ctx, eq_number);
 	printf("eq_state: 0x%x\n", state);
 
 	printf("before join\n");

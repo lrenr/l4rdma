@@ -3,8 +3,8 @@
 #include <l4/re/env>
 #include "mem.h"
 #include "queue.h"
-#include "cmd.h"
-#include "uar.h"
+#include "device.h"
+#include "driver.h"
 
 namespace Event {
 
@@ -59,6 +59,11 @@ struct EQI {
 
 cu32 EQI_SIZE = sizeof(EQI) / 4;
 
+struct EQ_CTX {
+    l4_uint32_t irq_num;
+    l4_uint32_t type;
+};
+
 enum EVENT_TYPE {
     EVENT_TYPE_COMPLETION_EVENT                = 0x0,
     EVENT_TYPE_LAST_WQE_REACHED                = 0x13,
@@ -75,16 +80,22 @@ enum EQ_STATUS {
     EQ_STATUS_EQ_WRITE_FAILURE   = 0xa,
 };
 
+inline void arm_eq(Driver::MLX5_Context& ctx, l4_uint32_t eq_number) {
+    Q::Queue_Obj* eq = ctx.event_queue_pool.data.index[eq_number];
+
+    Device::iowrite32be(&eq->data.uarp->data.uar.addr->eqn_arm_and_update_ci, eq->data.id << UAR::UAR_EQN_OFFSET & UAR::UAR_EQN_MASK);
+}
+
 void init_eq(Q::Queue_Obj* eq);
 
-bool eqe_owned_by_hw(Q::Queue_Obj* eq);
+bool eqe_owned_by_hw(Driver::MLX5_Context& ctx, l4_uint32_t eq_number);
 
-void read_eqe(Q::Queue_Obj* eq, l4_uint32_t* payload);
+void read_eqe(Driver::MLX5_Context& ctx, l4_uint32_t eq_number, l4_uint32_t* payload);
 
-void create_eq(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq, l4_uint32_t type, l4_uint32_t irq_num, UAR::UAR_Page* uarp, dma& dma_cap);
+l4_uint32_t create_eq(Driver::MLX5_Context& ctx, l4_size_t size, l4_uint32_t type, l4_uint32_t irq_num);
 
-l4_uint32_t get_eq_state(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq);
+l4_uint32_t get_eq_state(Driver::MLX5_Context& ctx, l4_uint32_t eq_number);
 
-void destroy_eq(CMD::CMD_Args& cmd_args, Q::Queue_Obj* eq);
+void destroy_eq(Driver::MLX5_Context& ctx, l4_uint32_t eq_number);
 
 }

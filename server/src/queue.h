@@ -9,29 +9,24 @@
 
 namespace Q {
 
-template<typename QE>
 struct Queue {
-    QE* start;
+    void* start;
     l4_size_t size;
     l4_uint32_t head = 0;
     MEM::DMA_MEM dma_mem;
 };
 
-template<typename QE>
-l4_uint32_t enqueue(Queue<QE>& q) {
-    l4_uint32_t slot = q.head;
-    if (++q.head >= q.size)
-        q.head = 0;
-    return slot;
-}
+l4_uint32_t enqueue(Queue& q);
 
 struct QOP_PD;
 
 struct QOP_BD {};
 
-struct QOP_ED : Q::Queue<void> {
+struct QOP_ED : Q::Queue {
     l4_uint32_t id;
     UAR::UAR_Page* uarp;
+    l4_uint32_t* pas_list;
+    void* q_ctx;
 };
 
 typedef PA::Pool<QOP_PD, QOP_BD, QOP_ED> Queue_Obj_Pool;
@@ -39,23 +34,41 @@ typedef PA::Block<QOP_BD, QOP_ED> Queue_Obj_Block;
 typedef PA::Element<QOP_BD, QOP_ED> Queue_Obj;
 
 struct QOP_PD {
+    l4_uint32_t page_entry_count;
+    dma* dma_cap;
+    UAR::UAR_Page_Pool* uar_page_pool;
     std::unordered_map<l4_uint64_t, Queue_Obj*> index;
 };
 
-void alloc_block(Queue_Obj_Pool* qop);
+//void alloc_block(Queue_Obj_Pool* qop);
+
+template<typename Q_CTX>
+void alloc_block(Queue_Obj_Pool* qop){
+    Queue_Obj_Block* qob = create_block(qop);
+
+    for (l4_uint64_t i = 0; i < qop->block_size; i++) {
+        Queue_Obj* qo = &qob->start[i];
+        qo->used = false;
+        qo->block = qob;
+        qo->data.q_ctx = (Q_CTX*)malloc(sizeof(Q_CTX));
+    }
+
+    add_block_to_pool(qop, qob);
+}
+
+inline void index_queue(Queue_Obj_Pool* qop, Queue_Obj* qo) {
+    qop->data.index[qo->data.id] = qo;
+}
+
+inline Queue_Obj* get_queue(Queue_Obj_Pool* qop, l4_uint32_t id) {
+    return qop->data.index[id];
+}
 
 void free_block(Queue_Obj_Pool* qop, Queue_Obj_Block* qob);
 
-inline Queue_Obj* alloc_queue(Queue_Obj_Pool* qop) {
-    Queue_Obj* qo = PA::alloc_page<QOP_PD, QOP_BD, QOP_ED>(qop);
-    qop->data.index[qo->data.id] = qo;
-    return qo;
-}
+Queue_Obj* alloc_queue(Queue_Obj_Pool* qop, l4_size_t size);
 
-inline void free_queue(Queue_Obj_Pool* qop, l4_uint64_t id) {
-    auto n = qop->data.index.extract(id);
-    PA::free_page<QOP_PD, QOP_BD, QOP_ED>(qop, n.mapped());
-}
+void free_queue(Queue_Obj_Pool* qop, l4_uint64_t id);
 
 inline void remove_block_from_pool(Queue_Obj_Pool* qop, Queue_Obj_Block* qob) {
     PA::remove_block_from_pool<QOP_PD, QOP_BD, QOP_ED>(qop, qob);

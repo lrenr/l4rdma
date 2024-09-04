@@ -122,7 +122,7 @@ l4_uint32_t CMD::create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t 
     l4_uint32_t* payload, l4_uint32_t payload_length,
     l4_uint32_t output_length) {
     output_length = (output_length + 2) * 4;
-    CQE* cqe = &cmd_args.cq.start[cmd_args.cq.head];
+    CQE* cqe = &((CQE*)cmd_args.cq.start)[cmd_args.cq.head];
     reg32* reg = (reg32*)cqe;
     /* init all regs to 0 (might be unnecessary) */
     for (int i = 0; i < 16; i++) iowrite32be(&reg[i], 0);
@@ -183,7 +183,7 @@ void CMD::unpack_mail(MEM::DMA_MEM* mailbox, l4_uint32_t* payload, l4_uint32_t l
 }
 
 void CMD::get_cmd_output(CMD::CMD_Args& cmd_args, l4_uint32_t slot, l4_uint32_t* output, l4_uint32_t output_length) {
-    CQE* cqe = &cmd_args.cq.start[slot];
+    CQE* cqe = &((CQE*)cmd_args.cq.start)[slot];
     if (!output_length) return;
     output[0] = ioread32be(&cqe->cod.output[0]);
     if (output_length > 1) {
@@ -199,9 +199,9 @@ void CMD::ring_doorbell(reg32* dbv, l4_uint32_t* slots, int count) {
     iowrite32be(dbv, dbr);
 }
 
-void CMD::validate_cqe(Q::Queue<CMD::CQE>& cq, l4_uint32_t* slots, int count) {
+void CMD::validate_cqe(Q::Queue& cq, l4_uint32_t* slots, int count) {
     for (int i = 0; i < count; i++) {
-        CQE* cqe = &cq.start[slots[i]];
+        CQE* cqe = &((CQE*)cq.start)[slots[i]];
         poll_ownership(cqe);
         check_cqe_status(cqe);
         check_cod_status(&cqe->cod);
