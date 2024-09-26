@@ -29,7 +29,7 @@ struct Element {
 
 template<typename BD, typename ED>
 struct Block {
-    l4_uint64_t page_count;
+    l4_uint64_t element_count;
     Block* next;
     Block* prev;
     BD data;
@@ -59,11 +59,11 @@ Element<BD, ED>* alloc_page(Pool<PD, BD, ED>* p) {
     if (p->block_count == 0) p->alloc_block(p);
     Block<BD, ED>* b = p->start;
     while (true) {
-        if (b->page_count < p->block_size) {
+        if (b->element_count < p->block_size) {
             for (l4_uint64_t i = 0; i < p->block_size; i++) {
                 if (b->start[i].used) continue;
                 p->size++;
-                b->page_count++;
+                b->element_count++;
                 b->start[i].used = true;
 
                 return &b->start[i];
@@ -81,9 +81,9 @@ void free_page(Pool<PD, BD, ED>* p, Element<BD, ED>* e) {
 
     Block<BD, ED>* b = e->block;
     p->size--;
-    b->page_count--;
+    b->element_count--;
     e->used = false;
-    if (b->page_count == 0) p->free_block(p, b);
+    if (b->element_count == 0) p->free_block(p, b);
 }
 
 /* removes Block from Pool Block List */
@@ -123,7 +123,7 @@ void add_block_to_pool(Pool<PD, BD, ED>* p, Block<BD, ED>* b) {
 template<typename PD, typename BD, typename ED>
 Block<BD, ED>* create_block(Pool<PD, BD, ED>* p) {
     Block<BD, ED>* b = (Block<BD, ED>*)malloc(sizeof(Block<BD, ED>));
-    b->page_count = 0;
+    b->element_count = 0;
     b->next = nullptr;
     b->prev = nullptr;
     b->start = (Element<BD, ED>*)malloc(sizeof(Element<BD, ED>) * p->block_size);

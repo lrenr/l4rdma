@@ -7,7 +7,7 @@ void UAR::alloc_block(UAR_Page_Pool* upp) {
         UAR_Page* up = &upb->start[i];
         up->used = false;
         up->block = upb;
-        up->data.uar.index = upp->data.base.index + i;
+        up->data.uar.index = upp->data.base.index + i;/*TODO fix*/
         up->data.uar.addr = (Page*)((l4_uint8_t*)upp->data.base.addr + (i * HCA_PAGE_SIZE));
     }
 

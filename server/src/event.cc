@@ -1,5 +1,6 @@
 #include <bitset>
 #include <cmath>
+#include <cstdio>
 #include <stdexcept>
 #include "event.h"
 #include "device.h"
@@ -46,7 +47,7 @@ l4_uint32_t Event::create_eq(Driver::MLX5_Context& ctx, l4_size_t size, l4_uint3
     eqi.eqc.log_eq_size_and_uar |= eq->data.uarp->data.uar.index << EQC_UAR_OFFSET & EQC_UAR_MASK;
     eqi.eqc.intr = eq_ctx->irq_num << EQC_INTR_OFFSET & EQC_INTR_MASK;
     std::bitset<64> eq_type{0};
-    eq_type[eq_ctx->type] = true;
+    if (eq_ctx->type != 0) eq_type[eq_ctx->type] = true;
     eqi.type[0] = (l4_uint32_t)(eq_type.to_ullong() >> 32);
     eqi.type[1] = (l4_uint32_t)eq_type.to_ullong();
     
@@ -87,6 +88,7 @@ l4_uint32_t Event::create_eq(Driver::MLX5_Context& ctx, l4_size_t size, l4_uint3
     eq->data.id = eq_number;
 
     Q::index_queue(&ctx.event_queue_pool, eq);
+    printf("used: %d\n", eq->used);
     return eq_number;
 }
 
@@ -122,4 +124,6 @@ void Event::destroy_eq(Driver::MLX5_Context& ctx, l4_uint32_t eq_number) {
     slot = create_cqe(ctx, DESTROY_EQ, 0x0, payload, 2, DESTROY_EQ_OUTPUT_LENGTH);
     ring_doorbell(ctx.dbv, &slot, 1);
     validate_cqe(ctx.cq, &slot, 1);
+
+    printf("destroyed eq: %d\n", eq_number);
 }

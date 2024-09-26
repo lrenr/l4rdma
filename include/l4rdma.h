@@ -26,5 +26,6 @@ struct CQ_if : L4::Kobject_t<CQ_if, L4::Kobject> {
 struct L4RDMA : L4::Kobject_t<L4RDMA, L4::Kobject> {
 	L4_INLINE_RPC(long, create_wq, (unsigned long qsize, L4::Ipc::Out<L4::Cap<WQ_if>> wq));
 	L4_INLINE_RPC(long, create_cq, (unsigned long qsize, L4::Ipc::Out<L4::Cap<CQ_if>> cq));
-	typedef L4::Typeid::Rpcs<create_wq_t, create_cq_t> Rpcs;
+	L4_INLINE_RPC(long, kill, ());
+	typedef L4::Typeid::Rpcs<create_wq_t, create_cq_t, kill_t> Rpcs;
 };

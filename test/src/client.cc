@@ -76,6 +76,11 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
+	if (server->kill() != L4_EOK) {
+		printf("Failed to kill server\n");
+		return 1;
+	}
+
 	printf("success\n");
 
 	return 0;

@@ -14,6 +14,8 @@ void CMD::poll_ownership(volatile CQE* cqe) {
 
 	l4_uint8_t res;
     auto start = high_resolution_clock::now();
+
+    /* check if ownership bit is set to software == 0 */
     while ((res = ioread32be(&cqe->ctrl) & CQE_OWNERSHIP_MASK)) {
         auto now = high_resolution_clock::now();
         if (duration_cast<milliseconds>(now - start).count() >= CMD_TIMEOUT_MS)
@@ -159,6 +161,8 @@ l4_uint32_t CMD::create_cqe(CMD::CMD_Args& cmd_args, OPCODE opcode, l4_uint32_t 
         iowrite32be(&cqe->output_mailbox_lsb, (l4_uint32_t)cmd_args.omb_mem.phys & CQE_MAILBOX_MASK);
     }
     iowrite32be(&cqe->output_length, output_length);
+
+    /* set ownership bit to hardware == 1 */
     iowrite32be(&cqe->ctrl, 1);
     
     l4_uint32_t slot = Q::enqueue(cmd_args.cq);

@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <stdio.h>
 #include <cstring>
 #include <stdexcept>
@@ -9,6 +10,8 @@
 #include "mem.h"
 #include "interrupt.h"
 #include "event.h"
+#include "wq.h"
+#include "cq.h"
 
 using namespace CMD;
 using namespace Device;
@@ -265,6 +268,26 @@ void Driver::init_queue_obj_pool(MLX5_Context& ctx) {
 	ctx.event_queue_pool.data.page_entry_count = Event::PAGE_EQE_COUNT;
 	ctx.event_queue_pool.data.uar_page_pool = &ctx.uar_page_pool;
 	ctx.event_queue_pool.start = nullptr;
+
+	ctx.compl_queue_pool.max = 1024;
+	ctx.compl_queue_pool.size = 0;
+	ctx.compl_queue_pool.block_size = 64;
+	ctx.compl_queue_pool.block_count = 0;
+	ctx.compl_queue_pool.alloc_block = Q::alloc_block<CQ::CQ_CTX>;
+	ctx.compl_queue_pool.free_block = Q::free_block;
+	ctx.compl_queue_pool.data.page_entry_count = CQ::PAGE_CQE_COUNT;
+	ctx.compl_queue_pool.data.uar_page_pool = &ctx.uar_page_pool;
+	ctx.compl_queue_pool.start = nullptr;
+
+	ctx.work_queue_pool.max = 1024;
+	ctx.work_queue_pool.size = 0;
+	ctx.work_queue_pool.block_size = 64;
+	ctx.work_queue_pool.block_count = 0;
+	ctx.work_queue_pool.alloc_block = Q::alloc_block<WQ::WQ_CTX>;
+	ctx.work_queue_pool.free_block = Q::free_block;
+	ctx.work_queue_pool.data.page_entry_count = 1;
+	ctx.work_queue_pool.data.uar_page_pool = &ctx.uar_page_pool;
+	ctx.work_queue_pool.start = nullptr;
 }
 
 void Driver::init_hca(MLX5_Context& ctx) {
@@ -373,7 +396,18 @@ void Driver::teardown_hca(MLX5_Context& ctx) {
 
 	printf("Tearing Down ...\n\n");
 
-	//TODO dealloc UAR
+	/* destroy all event queues */
+	for (l4_uint32_t i = 0; i < ctx.event_queue_pool.block_count; i++) {
+		for (l4_uint32_t j = 0; j < ctx.event_queue_pool.block_size; j++) {
+			if (!ctx.event_queue_pool.start[i].start[j].used) continue;
+			l4_uint32_t eq_number = ctx.event_queue_pool.start[i].start[j].data.id;
+			Event::destroy_eq(ctx, eq_number);
+		}
+	}
+
+	/* dealloc UAR */
+	dealloc_uar(ctx);
+	printf("\n");
 
 	/* TEARDOWN_HCA */
 	slot = create_cqe(ctx, TEARDOWN_HCA, 0x0, nullptr, 0, TEARDOWN_HCA_OUTPUT_LENGTH);
@@ -400,7 +434,7 @@ void Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
 	l4_uint32_t slot, output[2];
 
 	/* ALLOC_UAR */
-	slot = create_cqe(ctx, ALLOC_UAR, 0x0, nullptr, 0, 2);
+	slot = create_cqe(ctx, ALLOC_UAR, 0x0, nullptr, 0, ALLOC_UAR_OUTPUT_LENGTH);
 	ring_doorbell(ctx.dbv, &slot, 1);
 	validate_cqe(ctx.cq, &slot, 1);
 	get_cmd_output(ctx, slot, output, 2);
@@ -420,36 +454,61 @@ void Driver::alloc_uar(MLX5_Context& ctx, l4_uint8_t* bar0) {
 	ctx.uar_page_pool.start = nullptr;
 }
 
+void Driver::dealloc_uar(MLX5_Context& ctx) {
+	l4_uint32_t slot;
+	l4_uint32_t uar_index = ctx.uar_page_pool.data.base.index;
+	l4_uint32_t payload[2] = {uar_index, 0};
+
+	/* DEALLOC_UAR */
+	slot = create_cqe(ctx, DEALLOC_UAR, 0x0, payload, 2, DEALLOC_UAR_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
+
+	printf("deallocated uar: %d\n", uar_index);
+}
+
 void* Driver::page_request_handler(void* arg) {
 	using namespace Event;
 
 	Interrupt::IRQH_Args args = *(Interrupt::IRQH_Args*)arg;
-	PRH_OPT opt = *(PRH_OPT*)args.opt;
-	l4_uint32_t eq = opt.eq;
+	PRH_OPT* opt = (PRH_OPT*)args.opt;
+	l4_uint32_t eq = opt->eq;
 	printf("msix_vec_l4: 0x%x\n", args.msix_vec_l4);
 	fflush(stdout);
 
 	L4::Cap<L4::Irq> irq = Interrupt::create_msix_irq(args.icu_src,
 		args.msix_table, args.irq_num, args.msix_vec_l4, args.icu);
 
-	while (opt.active) {
-		irq->receive(L4_IPC_NEVER, l4_utcb());
+	while (opt->active) {
+		/* wait for interrupt */
+		//irq->receive(L4_IPC_NEVER, l4_utcb());
+		irq->receive({200}, l4_utcb());
+
+		/* check if event occurred */
+		if (eqe_owned_by_hw(*opt->ctx, eq)) continue;
 		printf("interrupt!\n");
-		fflush(stdout);
-		if (eqe_owned_by_hw(*opt.ctx, eq)) continue;
+
+		/* read page_count from eqe */
 		l4_uint32_t payload[7];
-		read_eqe(*opt.ctx, eq, payload);
-		printf("num_pages: %d\n", payload[1]);
-		fflush(stdout);
+		read_eqe(*opt->ctx, eq, payload);
+		l4_int32_t page_count = (l4_int32_t)payload[1];
+		printf("num_pages: %d\n", page_count);
+
+		/* provide or reclaim pages from hca */
+		if (page_count > 0) {
+			provide_pages(*opt->ctx, page_count);
+			continue;
+		}
+		reclaim_pages(*opt->ctx, std::abs(page_count));
 	}
 
 	irq->detach(l4_utcb());
-	printf("detach!\n");
+	printf("detach from IRQ!\n");
 
 	pthread_exit(NULL);
 }
 
-void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu) {
+pthread_t Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* msix_table, L4::Cap<L4::Icu>& icu, PRH_OPT& opt) {
 	using namespace Event;
 
 	cu32 irq_num = 0;
@@ -459,7 +518,7 @@ void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* ms
 	l4_uint32_t state = get_eq_state(ctx, eq_number);
 	printf("eq_state: 0x%x\n", state);
 
-	PRH_OPT opt;
+	//PRH_OPT opt;
 	opt.ctx = &ctx;
 	opt.active = true;
 	opt.eq = eq_number;
@@ -471,8 +530,42 @@ void Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg32* ms
 	state = get_eq_state(ctx, eq_number);
 	printf("eq_state: 0x%x\n", state);
 
-	printf("before join\n");
+	/*printf("before join\n");
 	fflush(stdout);
 	pthread_join(handler_thread, NULL);
-	printf("after join\n");
+	printf("after join\n");*/
+
+	return handler_thread;
+}
+
+l4_uint32_t Driver::alloc_pd(MLX5_Context& ctx) {
+	l4_uint32_t slot, output[2], pd;
+
+	/* ALLOC_PD */
+	slot = create_cqe(ctx, ALLOC_PD, 0x0, nullptr, 0, ALLOC_PD_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
+	get_cmd_output(ctx, slot, output, 2);
+
+	pd = output[0];
+	printf("pd: %d\n", pd);
+	return pd;
+}
+
+void Driver::dealloc_pd(MLX5_Context& ctx, l4_uint32_t pd) {
+	l4_uint32_t slot;
+	l4_uint32_t payload[2] = {pd, 0};
+
+	/* DEALLOC_PD */
+	slot = create_cqe(ctx, DEALLOC_PD, 0x0, payload, 2, DEALLOC_PD_OUTPUT_LENGTH);
+	ring_doorbell(ctx.dbv, &slot, 1);
+	validate_cqe(ctx.cq, &slot, 1);
+
+	printf("deallocated pd: %d\n", pd);
+}
+
+void Driver::setup_work_queue(MLX5_Context& ctx) {
+	//l4_uint32_t cqn = CQ::create_cq(ctx, 2);
+	l4_uint32_t wq_number = WQ::create_wqc(ctx, 2, 0);
+	WQ::destroy_wqc(ctx, wq_number);
 }

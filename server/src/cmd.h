@@ -40,7 +40,12 @@ cu32 QUERY_ISSI_OUTPUT_LENGTH           = 26;
 cu32 SET_ISSI_OUTPUT_LENGTH             = 0;
 cu32 SET_DRIVER_VERSION_OUTPUT_LENGTH   = 0;
 cu32 CREATE_EQ_OUTPUT_LENGTH            = 2;
-cu32 DESTROY_EQ_OUTPUT_LENGTH           = 0;
+cu32 DESTROY_EQ_OUTPUT_LENGTH           = 2;
+cu32 CREATE_CQ_OUTPUT_LENGTH            = 2;
+cu32 ALLOC_PD_OUTPUT_LENGTH             = 2;
+cu32 DEALLOC_PD_OUTPUT_LENGTH           = 0;
+cu32 ALLOC_UAR_OUTPUT_LENGTH            = 2;
+cu32 DEALLOC_UAR_OUTPUT_LENGTH          = 0;
 
 #pragma pack(4)
 /* Command Input Data */

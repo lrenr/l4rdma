@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <stdio.h>
 #include <thread>
 #include <pthread-l4.h>
@@ -40,4 +41,8 @@ long L4RDMA_Server::op_create_cq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::C
     cq = L4::Ipc::make_cap_rw(cq_if);
     printf("created CQ cap\n");
     return L4_EOK;
+}
+
+long L4RDMA_Server::op_kill(L4RDMA::Rights) {
+    throw std::runtime_error("service loop killed");
 }

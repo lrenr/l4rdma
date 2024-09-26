@@ -4,9 +4,9 @@ L4DIR   ?= $(PKGDIR)/../..
 REQUIRES_LIBS = libstdc++ libsupc++ libpthread libio-vbus
 TARGET          = l4rdma
 SRC_CC          = 	main.cc \
-					wq.cc \
-					cq.cc \
-					server.cc \
+					wq_interface.cc \
+					cq_interface.cc \
+					server_interface.cc \
 					device.cc \
 					cmd.cc \
 					mem.cc \
@@ -14,6 +14,8 @@ SRC_CC          = 	main.cc \
 					event.cc \
 					interrupt.cc \
 					uar.cc \
-					queue.cc
+					queue.cc \
+					cq.cc \
+					wq.cc
 
 include $(L4DIR)/mk/prog.mk

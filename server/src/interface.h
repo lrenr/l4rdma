@@ -59,4 +59,5 @@ class L4RDMA_Server : public L4::Epiface_t<L4RDMA_Server, L4RDMA> {
 public:
 	long op_create_wq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::Cap<WQ_if> &wq);
 	long op_create_cq(L4RDMA::Rights, unsigned long qsize, L4::Ipc::Cap<CQ_if> &cq);
+	long op_kill(L4RDMA::Rights);
 };

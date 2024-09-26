@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <sys/ipc.h>
 #include <sys/mman.h>
+#include <pthread-l4.h>
 #include "interface.h"
 #include "device.h"
 #include "driver.h"
@@ -57,6 +58,7 @@ int main(int argc, char **argv) {
 
 	ctx.event_queue_pool.data.dma_cap = &dma_cap;
 	ctx.compl_queue_pool.data.dma_cap = &dma_cap;
+	ctx.work_queue_pool.data.dma_cap = &dma_cap;
 
 	//MEM::MEM_Page* mp = MEM::alloc_page(&ctx.mem_page_pool);
 	//MEM::free_page(&ctx.mem_page_pool, mp->data.phys);
@@ -72,12 +74,22 @@ int main(int argc, char **argv) {
 	printf("pool_size: %llu | pool_block_count: %llu | hash_map_size: %lu\n", ctx.mem_page_pool.size, ctx.mem_page_pool.block_count, ctx.mem_page_pool.data.index.size());
 
 	printf("------------\n\n");
-	setup_event_queue(ctx, icu_src, msix_table, icu);
-
+	PRH_OPT handler_thread_opt;
+	pthread_t handler_thread = setup_event_queue(ctx, icu_src, msix_table, icu, handler_thread_opt);
 	printf("------------\n\n");
-	teardown_hca(ctx);
+	setup_work_queue(ctx);
+	printf("------------\n\n");
 
-	main_srv.loop();
+	try {
+		main_srv.loop();
+	} catch (...) {
+		printf("------------\n\n");
+		printf("Shutting down server!\n");
+		handler_thread_opt.active = false;
+		pthread_join(handler_thread, NULL);
+		printf("handler thread joined\n\n");
+		teardown_hca(ctx);	
+	}
 
 	return 0;
 }

@@ -1,95 +1,66 @@
-#include <stdio.h>
-#include <l4/sys/scheduler>
-#include "interface.h"
+#include <cmath>
+#include "event.h"
+#include "cq.h"
 
-void CQ_impl::setup_and_start(unsigned long qsize, L4::Cap<L4::Thread> caller,
-        L4::Cap<CQ_if> *res) {
-    CQ_impl compl_queue;
+l4_uint32_t CQ::create_cq(Driver::MLX5_Context& ctx, l4_size_t size) {
+    using namespace CMD;
 
-    auto sp = l4_sched_param(2);
-    sp.affinity = l4_sched_cpu_set(0, 0);
-    if (l4_error(L4Re::Env::env()->scheduler()->run_thread(
-            Pthread::L4::cap(pthread_self()), sp))) {
-        return;
+    l4_uint32_t slot;
+
+    MEM::MEM_Page* mp = MEM::alloc_page(&ctx.mem_page_pool);
+    l4_uint64_t phys = mp->data.phys;
+
+    l4_uint32_t eq_number = Event::create_eq(ctx, 4, Event::EVENT_TYPE_COMPLETION_EVENT, 0);
+
+    Q::Queue_Obj* cq = Q::alloc_queue(&ctx.compl_queue_pool, size);
+
+    CQC cqc;
+    cqc.ctrl = 0;
+    cqc.rsvd0[0] = 0;
+    cqc.page_offset = 0;
+    cqc.log_cq_size_and_uar_page = (l4_uint8_t)std::log2(size) << CQC_SIZE_OFFSET & CQC_SIZE_MASK;
+    cqc.log_cq_size_and_uar_page |= cq->data.uarp->data.uar.index << CQC_UAR_OFFSET & CQC_UAR_MASK;
+    cqc.cq_period_and_cq_max_count = 0;
+    cqc.eqn = eq_number;
+    cqc.log_page_size = 0;
+    cqc.rsvd1[0] = 0;
+    cqc.last_notified_index = 0;
+    cqc.last_solicit_index = 0;
+    cqc.consumer_counter = 0;
+    cqc.producer_counter = 0;
+    cqc.rsvd2[0] = 0;
+    cqc.rsvd2[1] = 0;
+    cqc.dbr[0] = (l4_uint32_t)(phys >> 32);
+    cqc.dbr[1] = (l4_uint32_t)phys;
+
+    cu32 page_count = size % PAGE_CQE_COUNT ? (size / PAGE_CQE_COUNT) + 1 : size / PAGE_CQE_COUNT;
+
+    l4_uint32_t payload[128];
+    l4_uint32_t payload_length = 2 + CQC_SIZE + 24 + (page_count * 2);
+    printf("CQC_SIZE: %u | page_count: %u | payload_length: %u\n", CQC_SIZE, page_count, payload_length);
+
+    payload[0] = 0;
+    payload[1] = 0;
+
+    for (l4_uint32_t i = 0; i < CQC_SIZE; i++)
+        payload[2 + i] = ((l4_uint32_t*)&cqc)[i];
+
+    for (l4_uint32_t i = 0; i < page_count; i++) {
+        payload[2 + CQC_SIZE + 24 + i] = cq->data.pas_list[i];
     }
 
-    if (compl_queue.mem_alloc(qsize) != 0) {
-        printf("Failed to allocate CQ memory\n");
-        return;
-    }
+    /* CREATE_CQ */
+    slot = create_cqe(ctx, CREATE_CQ, 0x0, payload, payload_length, CREATE_CQ_OUTPUT_LENGTH);
+    ring_doorbell(ctx.dbv, &slot, 1);
+    validate_cqe(ctx.cq, &slot, 1);
 
-    if (!compl_queue.registry.registry()->register_obj(&compl_queue).is_valid()) {
-        printf("Failed to register CQ\n");
-        return;
-    }
+    l4_uint32_t output[CREATE_CQ_OUTPUT_LENGTH];
+    get_cmd_output(ctx, slot, output, CREATE_CQ_OUTPUT_LENGTH);
 
-    *res = compl_queue.obj_cap();
+    l4_uint32_t cq_number = output[0];
+    printf("cq_number: %d | c_eqn: %d\n", cq_number, eq_number);
+    cq->data.id = cq_number;
 
-    printf("Setup complete\n");
-
-    /* Notify server that this cp is ready to receive requests */
-    auto tag = l4_ipc_send(caller.cap(), l4_utcb(),
-            l4_msgtag(0, 0, 0, 0), L4_IPC_NEVER);
-    if (l4_msgtag_has_error(tag)) {
-        printf("Failed to notify server\n");
-        return;
-    }
-
-    try {
-        compl_queue.registry.loop();
-    }
-    catch (...) {
-        printf("Shutting down completion queue\n");
-
-        /* Unregister server handler, clean up resources and then leave */
-        compl_queue.registry.registry()->unregister_obj(&compl_queue);
-        compl_queue.cleanup();
-    }
-}
-
-long CQ_impl::op_get_cq(CQ_if::Rights, L4::Ipc::Cap<L4Re::Dataspace> &cq) {
-    cq = L4::Ipc::make_cap_rw(this->cq);
-    return L4_EOK;
-}
-
-long CQ_impl::op_terminate(CQ_if::Rights) {
-    throw std::exception {};
-    return L4_EOK;
-}
-
-int CQ_impl::mem_alloc(unsigned long qsize) {
-    /* Alloc capabilities for memory */
-    cq = L4Re::Util::cap_alloc.alloc<L4Re::Dataspace>();
-    if (! cq.is_valid()) {
-        printf("Failed to allocate cap slot for receive queue\n");
-        return 1;
-    }
-
-    /* Allocate dataspaces for memory */
-    if (L4Re::Env::env()->mem_alloc()->alloc(qsize, cq) < 0) {
-        printf("Failed to allocate receive queue dataspace\n");
-        return 1;
-    }
-
-    /* Map dataspaces into address space */
-    if (L4Re::Env::env()->rm()->attach(&cq_addr, qsize,
-            L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW,
-            L4::Ipc::make_cap_rw(cq)) < 0) {
-        printf("Failed to attach receive queue dataspace\n");
-        return 1;
-    }
-
-    cq_size = qsize;
-
-    printf("Memory allocated\n");
-    return 0;
-}
-
-void CQ_impl::cleanup() {
-    /* Unmap dataspaces from address space */
-    if (L4Re::Env::env()->rm()->detach(cq_addr, NULL) < 0)
-        printf("Failed to detach RQ dataspace!\n");
-    
-    /* Free dataspace capabilities */
-    L4Re::Util::cap_alloc.free(cq, L4Re::This_task, L4_FP_ALL_SPACES);
+    Q::index_queue(&ctx.compl_queue_pool, cq);
+    return cq_number;
 }

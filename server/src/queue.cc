@@ -34,6 +34,7 @@ Q::Queue_Obj* Q::alloc_queue(Queue_Obj_Pool* qop, l4_size_t size) {
     Queue_Obj* qo = PA::alloc_page<QOP_PD, QOP_BD, QOP_ED>(qop);
     qo->data.uarp = UAR::alloc_page(qop->data.uar_page_pool);
     qo->data.size = size;
+    printf("uar: %d\n", qo->data.uarp->data.uar.index);
 
     cu32 page_count = size % qop->data.page_entry_count ? (size / qop->data.page_entry_count) + 1 : size / qop->data.page_entry_count;
     qo->data.pas_list = (l4_uint32_t*)malloc(sizeof(l4_uint32_t) * page_count);
