@@ -49,12 +49,15 @@ void MEM::free_dma_mem(L4Re::Util::Shared_cap<L4Re::Dma_space>& dma_cap, l4_size
 void MEM::alloc_block(MEM_Page_Pool* mpp) {
     MEM_Page_Block* mpb = create_block(mpp);
 
+    /* alloc DMA memory for the entire block */
     alloc_dma_mem(*mpp->data.dma_cap, HCA_PAGE_SIZE * mpp->block_size, &mpb->data.dma_mem);
     MEM_Page* mp;
     for (l4_uint64_t i = 0; i < mpp->block_size; i++) {
         mp = &mpb->start[i];
         mp->used = false;
         mp->block = mpb;
+
+        /* split the DMA memory into pages */
         mp->data.virt = (l4_uint8_t*)mpb->data.dma_mem.virt + (i * HCA_PAGE_SIZE);
         mp->data.phys = mpb->data.dma_mem.phys + (i * HCA_PAGE_SIZE);
     }

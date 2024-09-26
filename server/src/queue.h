@@ -9,6 +9,7 @@
 
 namespace Q {
 
+/* generic HCA Queue */
 struct Queue {
     void* start;
     l4_size_t size;
@@ -18,6 +19,7 @@ struct Queue {
 
 l4_uint32_t enqueue(Queue& q);
 
+/* queue_pool definitions */
 struct QOP_PD;
 
 struct QOP_BD {};
@@ -39,8 +41,6 @@ struct QOP_PD {
     UAR::UAR_Page_Pool* uar_page_pool;
     std::unordered_map<l4_uint64_t, Queue_Obj*> index;
 };
-
-//void alloc_block(Queue_Obj_Pool* qop);
 
 template<typename Q_CTX>
 void alloc_block(Queue_Obj_Pool* qop){

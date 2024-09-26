@@ -26,6 +26,7 @@ struct Init_Seg {
 
 struct HCA_CAP {};
 
+/* main context for all operations on the HCA */
 struct MLX5_Context : CMD::CMD_Args {
     Init_Seg* init_seg;
     HCA_CAP hca_cap;

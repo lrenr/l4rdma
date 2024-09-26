@@ -137,6 +137,7 @@ bool Driver::configure_hca_cap(MLX5_Context& ctx) {
 void Driver::provide_pages(MLX5_Context& ctx, l4_uint32_t page_count) {
 	l4_uint32_t slot;
 
+	/* how many times to run MANAGE_PAGES */
 	l4_uint32_t cmd_count = (page_count*2)/IMB_MAX_DATA;
 	l4_uint32_t remainder;
 	if ((remainder = (page_count*2)%IMB_MAX_DATA)) {
@@ -518,7 +519,6 @@ pthread_t Driver::setup_event_queue(MLX5_Context& ctx, l4_uint64_t icu_src, reg3
 	l4_uint32_t state = get_eq_state(ctx, eq_number);
 	printf("eq_state: 0x%x\n", state);
 
-	//PRH_OPT opt;
 	opt.ctx = &ctx;
 	opt.active = true;
 	opt.eq = eq_number;
@@ -564,6 +564,7 @@ void Driver::dealloc_pd(MLX5_Context& ctx, l4_uint32_t pd) {
 	printf("deallocated pd: %d\n", pd);
 }
 
+/* only a test function for now */
 void Driver::setup_work_queue(MLX5_Context& ctx) {
 	//l4_uint32_t cqn = CQ::create_cq(ctx, 2);
 	l4_uint32_t wq_number = WQ::create_wqc(ctx, 2, 0);

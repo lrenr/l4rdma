@@ -19,11 +19,13 @@ struct Page {
 };
 #pragma pack()
 
+/* UAR page properties */
 struct UAR {
     l4_uint32_t index;
     Page* addr;
 };
 
+/* uar_page_pool definitions */
 struct UAR_PD {
     UAR base;
 };

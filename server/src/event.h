@@ -26,6 +26,7 @@ cu32 EQC_LOG_PAGE_SIZE_OFFSET   = 24;
 cu32 PAGE_EQE_COUNT = HCA_PAGE_SIZE / 64;
 
 #pragma pack(4)
+/* Event Queue Entry */
 struct EQE {
     reg32 type = 0;
     reg32 rsvd[7];
@@ -33,6 +34,7 @@ struct EQE {
     reg32 ctrl = 0;
 };
 
+/* Even Queue Context */
 struct EQC {
     reg32 status = 0;
     reg32 rsvd0[1];
@@ -59,6 +61,7 @@ struct EQI {
 
 cu32 EQI_SIZE = sizeof(EQI) / 4;
 
+/* Event Queue properties for Queue template */
 struct EQ_CTX {
     l4_uint32_t irq_num;
     l4_uint32_t type;

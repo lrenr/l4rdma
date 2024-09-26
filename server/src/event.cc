@@ -58,18 +58,6 @@ l4_uint32_t Event::create_eq(Driver::MLX5_Context& ctx, l4_size_t size, l4_uint3
     for (l4_uint32_t i = 0; i < EQI_SIZE; i++)
         payload[i] = ((l4_uint32_t*)&eqi)[i];
 
-    /*MEM::alloc_dma_mem(dma_cap, HCA_PAGE_SIZE * page_count, &eq->data.dma_mem);
-    l4_uint64_t phys;
-    l4_uint32_t pas_offset;
-    for (l4_uint32_t i = 0; i < page_count; i++) {
-        phys = eq->data.dma_mem.phys + (i * HCA_PAGE_SIZE);
-        pas_offset = EQI_SIZE + (i * 2);
-        payload[pas_offset] = (l4_uint32_t)(phys >> 32);
-        payload[++pas_offset] = (l4_uint32_t)phys;
-    }
-
-    eq->data.start = (EQE*)eq->data.dma_mem.virt;
-    eq->data.head = 0;*/
     for (l4_uint32_t i = 0; i < page_count; i++) {
         payload[EQI_SIZE + i] = eq->data.pas_list[i];
     }

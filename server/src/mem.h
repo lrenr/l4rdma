@@ -11,16 +11,19 @@ typedef const l4_uint32_t cu32;
 typedef volatile l4_uint32_t reg32;
 typedef L4Re::Util::Shared_cap<L4Re::Dma_space> dma;
 
+/* page size on hardware in bytes */
 cu32 HCA_PAGE_SIZE = 4096;
 
 namespace MEM {
 
+/* chunk of DMA memory */
 struct DMA_MEM {
     L4Re::Util::Shared_cap<L4Re::Dataspace> cap;
     void* virt;
     L4Re::Dma_space::Dma_addr phys;
 };
 
+/* mem_page_pool definitions */
 struct MEM_PD;
 
 struct MEM_BD {
