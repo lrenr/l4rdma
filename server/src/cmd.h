@@ -24,7 +24,7 @@ cu32 CID_OPCODE_OFFSET      = 16;
 cu32 COD_STATUS_OFFSET      = 24;
 
 cu32 MAILBOX_ALIGN_SIZE = 0x1000;
-cu32 MBB_MAX_COUNT = 50; // has to be >=42 for some reason //TODO figure out why
+cu32 MBB_MAX_COUNT = 50; // max number of blocks in mailboxes
 cu32 IMB_MAX_DATA = 128 * MBB_MAX_COUNT; // 128 * 4-Bytes per block
 cu32 OMB_MAX_DATA = 128 * MBB_MAX_COUNT;
 cu32 CMD_TIMEOUT_MS = 5000;

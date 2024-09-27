@@ -19,14 +19,10 @@ L4::Cap<L4::Irq> Interrupt::create_and_bind_irq(l4_uint32_t irq_num, L4::Cap<L4:
     
     /* create IRQ object */
     L4Re::chksys(L4Re::Env::env()->factory()->create(irq));
-    printf("04\n");
-    fflush(stdout);
 
     /* bind IRQ to the current thread */
     L4Re::chksys(l4_error(irq->bind_thread(thread, 0)), 
         "Failed to bind IRQ to calling thread.");
-    printf("05\n");
-    fflush(stdout);
     
     /* bind IRQ to ICU */
     L4Re::chksys(l4_error(icu->bind(irq_num, irq)), 
