@@ -1,6 +1,11 @@
-# l4rdma
+# ConnectX-4 based NIC driver for L4Re
 
-### modules.list entry
+Runs as an L4Re userspace server.
+Executing commands on the firmware command interface, and NIC initialization are working.
+
+More information in the overview: [here!](overview.pdf)
+
+### modules.list entry to run
 ```
 entry l4rdma
 moe l4rdma.cfg
